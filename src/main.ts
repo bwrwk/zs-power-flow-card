@@ -97,6 +97,7 @@ export class ZsPowerFlowCard extends LitElement {
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : nothing}
+          ${advanced ? this.renderHealthRail(snapshot) : nothing}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : nothing}
         </section>
       </ha-card>
@@ -275,12 +276,39 @@ export class ZsPowerFlowCard extends LitElement {
         <div class="rail-card">
           <span>Stan magazynu</span>
           <strong>${this.describeBatteryStatus(snapshot)}</strong>
-          <small>${snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`}</small>
+          <small>${snapshot.batteryState ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
           <span>Tryb polaczenia</span>
           <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
+        </div>
+      </section>
+    `;
+  }
+
+  private renderHealthRail(snapshot: PowerFlowSnapshot) {
+    return html`
+      <section class="health-rail">
+        <div class="health-card">
+          <span>Kondycja baterii</span>
+          <strong>${snapshot.batterySoh === null ? '--' : `${snapshot.batterySoh.toFixed(1)}% SOH`}</strong>
+          <small>${snapshot.batteryTemperature === null ? 'Temp. baterii --' : `Temp. baterii ${snapshot.batteryTemperature.toFixed(0)}°C`}</small>
+        </div>
+        <div class="health-card">
+          <span>Temperatura falownika</span>
+          <strong>${snapshot.inverterTemperature === null ? '--' : `${snapshot.inverterTemperature.toFixed(0)}°C`}</strong>
+          <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
+        </div>
+        <div class="health-card ${this.isHealthy(snapshot.deviceAlarm) ? '' : 'warn'}">
+          <span>Alarm urzadzenia</span>
+          <strong>${snapshot.deviceAlarm ?? '--'}</strong>
+          <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
+        </div>
+        <div class="health-card ${snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn'}">
+          <span>Alarm baterii</span>
+          <strong>${this.describeBinaryHealth(snapshot.batteryAlarm)}</strong>
+          <small>Fault: ${this.describeBinaryHealth(snapshot.batteryFault)}</small>
         </div>
       </section>
     `;
@@ -306,9 +334,29 @@ export class ZsPowerFlowCard extends LitElement {
   }
 
   private describeBatteryStatus(snapshot: PowerFlowSnapshot): string {
+    if (snapshot.batteryState) return this.formatStatusLabel(snapshot.batteryState);
     if (snapshot.battery.mode === 'charging') return 'Ladowanie';
     if (snapshot.battery.mode === 'discharging') return 'Rozladowanie';
     return 'Stabilny bufor';
+  }
+
+  private formatStatusLabel(value: string): string {
+    const normalized = value.toLowerCase();
+    if (normalized === 'idle') return 'Idle';
+    if (normalized === 'charging') return 'Ladowanie';
+    if (normalized === 'discharging') return 'Rozladowanie';
+    if (normalized === 'normal') return 'Normal';
+    return value;
+  }
+
+  private isHealthy(value: string | null): boolean {
+    if (!value) return true;
+    return ['ok', 'normal', 'none', 'idle'].includes(value.toLowerCase());
+  }
+
+  private describeBinaryHealth(value: boolean | null): string {
+    if (value === null) return '--';
+    return value ? 'Alarm' : 'OK';
   }
 
   static styles = css`
@@ -659,6 +707,13 @@ export class ZsPowerFlowCard extends LitElement {
       margin-top: 16px;
     }
 
+    .health-rail {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
     .rail-card {
       padding: 14px 16px;
       border-radius: 18px;
@@ -666,6 +721,32 @@ export class ZsPowerFlowCard extends LitElement {
         linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
         rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .health-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .health-card.warn {
+      border-color: rgba(248, 113, 113, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+    }
+
+    .health-card span,
+    .health-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .health-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.02rem;
     }
 
     .rail-card span,
@@ -771,6 +852,10 @@ export class ZsPowerFlowCard extends LitElement {
       .advanced-rail {
         grid-template-columns: 1fr;
       }
+
+      .health-rail {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -836,6 +921,10 @@ export class ZsPowerFlowCard extends LitElement {
 
       .advanced-rail {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .health-rail {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
       }
     }
 

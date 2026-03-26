@@ -1,4 +1,4 @@
-import { FlowTheme, HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
+import { FlowTheme, FlowNodeData, HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
 
 const THEMES: Record<FlowTheme, { panel: string; border: string; text: string; muted: string; solar: string; grid: string; battery: string; home: string }> = {
   aurora: {
@@ -33,36 +33,68 @@ const THEMES: Record<FlowTheme, { panel: string; border: string; text: string; m
   },
 };
 
-const FALLBACK_VALUES = {
-  solar: 4.8,
-  grid: -1.2,
-  batteryPower: -1.6,
+const FALLBACK_VALUES_W = {
+  solar: 4800,
+  grid: -1200,
+  batteryPower: -1600,
   batterySoc: 68,
-  home: 5.2,
+  home: 5200,
 };
 
-function parseEntityNumber(hass: HomeAssistantLike | undefined, entityId: string | undefined, fallback: number): number {
-  if (!hass || !entityId) return fallback;
-  const raw = hass.states[entityId]?.state;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
+type EntityState = { state: string; attributes?: Record<string, unknown> };
+
+function getEntity(hass: HomeAssistantLike | undefined, entityId: string | undefined): EntityState | undefined {
+  if (!hass || !entityId) return undefined;
+  return hass.states[entityId];
 }
 
-function parseOptionalEntityNumber(hass: HomeAssistantLike | undefined, entityId: string | undefined): number | null {
-  if (!hass || !entityId) return null;
-  const raw = hass.states[entityId]?.state;
-  const parsed = Number(raw);
+function parseRawNumber(entity?: EntityState): number | null {
+  if (!entity) return null;
+  const parsed = Number(entity.state);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseEntityText(hass: HomeAssistantLike | undefined, entityId: string | undefined): string | null {
-  if (!hass || !entityId) return null;
-  const value = hass.states[entityId]?.state;
+function getUnit(entity?: EntityState): string | null {
+  const unit = entity?.attributes?.unit_of_measurement;
+  return typeof unit === 'string' ? unit : null;
+}
+
+function parsePowerWatts(entity?: EntityState, fallbackWatts = 0): number {
+  const value = parseRawNumber(entity);
+  if (value === null) return fallbackWatts;
+  const unit = (getUnit(entity) ?? '').toLowerCase();
+  if (unit === 'kw') return value * 1000;
+  return value;
+}
+
+function parseOptionalEnergyKwh(entity?: EntityState): number | null {
+  const value = parseRawNumber(entity);
+  if (value === null) return null;
+  const unit = (getUnit(entity) ?? '').toLowerCase();
+  if (unit === 'wh') return value / 1000;
+  if (unit === 'mwh') return value * 1000;
+  return value;
+}
+
+function parseOptionalNumber(entity?: EntityState): number | null {
+  return parseRawNumber(entity);
+}
+
+function parseEntityText(entity?: EntityState): string | null {
+  const value = entity?.state;
   return value && value !== 'unknown' && value !== 'unavailable' ? value : null;
 }
 
-function parseGridConnected(hass: HomeAssistantLike | undefined, entityId: string | undefined): boolean | null {
-  const state = parseEntityText(hass, entityId)?.toLowerCase();
+function parseOptionalBoolean(entity?: EntityState): boolean | null {
+  const state = parseEntityText(entity)?.toLowerCase();
+  if (!state) return null;
+  if (['on', 'connected', 'online', 'true', '1', 'ok', 'normal'].includes(state)) return true;
+  if (['off', 'disconnected', 'offline', 'false', '0', 'fault', 'alarm'].includes(state)) return false;
+  return null;
+}
+
+function parseGridConnected(entity?: EntityState): boolean | null {
+  const state = parseEntityText(entity)?.toLowerCase();
   if (!state) return null;
   if (['on', 'connected', 'online', 'true', '1'].includes(state)) return true;
   if (['off', 'disconnected', 'offline', 'false', '0'].includes(state)) return false;
@@ -73,20 +105,47 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function withDisplayPower(valueWatts: number) {
+  const absolute = Math.abs(valueWatts);
+  if (absolute >= 1000) {
+    return { displayValue: valueWatts / 1000, displayUnit: 'kW' as const };
+  }
+  return { displayValue: valueWatts, displayUnit: 'W' as const };
+}
+
+function createNode(label: string, valueWatts: number, accent: string, secondary: string): FlowNodeData {
+  const display = withDisplayPower(valueWatts);
+  return {
+    label,
+    value: valueWatts,
+    displayValue: display.displayValue,
+    displayUnit: display.displayUnit,
+    accent,
+    secondary,
+  };
+}
+
 export function getThemeTokens(theme: FlowTheme | undefined) {
   return THEMES[theme ?? 'aurora'];
 }
 
-export function buildSnapshot(
-  hass: HomeAssistantLike | undefined,
-  config: ZsPowerFlowCardConfig,
-): PowerFlowSnapshot {
+export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPowerFlowCardConfig): PowerFlowSnapshot {
   const themeTokens = getThemeTokens(config.theme);
-  const solar = Math.max(0, parseEntityNumber(hass, config.solar_entity, FALLBACK_VALUES.solar));
-  const grid = parseEntityNumber(hass, config.grid_entity, FALLBACK_VALUES.grid);
-  const batteryPower = parseEntityNumber(hass, config.battery_power_entity, FALLBACK_VALUES.batteryPower);
-  const home = Math.max(0, parseEntityNumber(hass, config.home_entity, FALLBACK_VALUES.home));
-  const socValue = parseEntityNumber(hass, config.battery_soc_entity, FALLBACK_VALUES.batterySoc);
+
+  const solarEntity = getEntity(hass, config.solar_entity);
+  const gridEntity = getEntity(hass, config.grid_entity);
+  const batteryEntity = getEntity(hass, config.battery_power_entity);
+  const homeEntity = getEntity(hass, config.home_entity);
+  const socEntity = getEntity(hass, config.battery_soc_entity);
+
+  const solar = Math.max(0, parsePowerWatts(solarEntity, FALLBACK_VALUES_W.solar));
+  const gridBase = parsePowerWatts(gridEntity, FALLBACK_VALUES_W.grid);
+  const batteryBase = parsePowerWatts(batteryEntity, FALLBACK_VALUES_W.batteryPower);
+  const home = Math.max(0, parsePowerWatts(homeEntity, FALLBACK_VALUES_W.home));
+  const grid = (config.invert_grid ? -1 : 1) * gridBase;
+  const batteryPower = (config.invert_battery ? -1 : 1) * batteryBase;
+
+  const socValue = parseOptionalNumber(socEntity) ?? FALLBACK_VALUES_W.batterySoc;
   const soc = Number.isFinite(socValue) ? clamp(socValue, 0, 100) : null;
   const batteryCapacity = config.battery_capacity_kwh ?? 0;
 
@@ -98,40 +157,20 @@ export function buildSnapshot(
   const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
   const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
   const netHomeDemand = home - solar;
-  const gridConnected = parseGridConnected(hass, config.grid_connected_entity);
-  const inverterStatus = parseEntityText(hass, config.inverter_status_entity);
+
+  const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
+  const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
+  const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
 
   return {
-    solar: {
-      label: config.solar_label ?? 'Produkcja',
-      value: solar,
-      unit: 'kW',
-      accent: themeTokens.solar,
-      secondary: 'PV',
-    },
-    grid: {
-      label: config.grid_label ?? 'Siec',
-      value: grid,
-      unit: 'kW',
-      accent: themeTokens.grid,
-      secondary: grid >= 0 ? 'Import' : 'Eksport',
-    },
+    solar: createNode(config.solar_label ?? 'Produkcja', solar, themeTokens.solar, 'PV'),
+    grid: createNode(config.grid_label ?? 'Siec', grid, themeTokens.grid, grid >= 0 ? 'Import' : 'Eksport'),
     battery: {
-      label: config.battery_label ?? 'Magazyn',
-      value: batteryPower,
-      unit: 'kW',
-      accent: themeTokens.battery,
-      secondary: soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`,
+      ...createNode(config.battery_label ?? 'Magazyn', batteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
       soc,
       mode: batteryPower > 0 ? 'discharging' : batteryPower < 0 ? 'charging' : 'idle',
     },
-    home: {
-      label: config.home_label ?? 'Dom',
-      value: home,
-      unit: 'kW',
-      accent: themeTokens.home,
-      secondary: 'Zuzycie',
-    },
+    home: createNode(config.home_label ?? 'Dom', home, themeTokens.home, 'Zuzycie'),
     solarToHome,
     solarToBattery,
     solarToGrid,
@@ -141,19 +180,29 @@ export function buildSnapshot(
     netHomeDemand,
     gridConnected,
     inverterStatus,
+    batteryState,
+    batterySoh: parseOptionalNumber(getEntity(hass, config.battery_soh_entity)),
+    batteryTemperature: parseOptionalNumber(getEntity(hass, config.battery_temperature_entity)),
+    inverterTemperature: parseOptionalNumber(getEntity(hass, config.inverter_temperature_entity)),
+    deviceAlarm: parseEntityText(getEntity(hass, config.device_alarm_entity)),
+    deviceFault: parseEntityText(getEntity(hass, config.device_fault_entity)),
+    batteryAlarm: parseOptionalBoolean(getEntity(hass, config.battery_alarm_entity)),
+    batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
     dailyEnergy: {
-      solar: parseOptionalEntityNumber(hass, config.daily_solar_energy_entity),
-      home: parseOptionalEntityNumber(hass, config.daily_home_energy_entity),
-      gridImport: parseOptionalEntityNumber(hass, config.daily_grid_import_energy_entity),
-      gridExport: parseOptionalEntityNumber(hass, config.daily_grid_export_energy_entity),
-      batteryCharge: parseOptionalEntityNumber(hass, config.daily_battery_charge_energy_entity),
-      batteryDischarge: parseOptionalEntityNumber(hass, config.daily_battery_discharge_energy_entity),
+      solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
+      home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
+      gridImport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity)),
+      gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+      batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
+      batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
     },
   };
 }
 
-export function formatPower(value: number, decimals = 1): string {
-  return `${value.toFixed(decimals)} kW`;
+export function formatPower(valueWatts: number, decimals = 1): string {
+  const display = withDisplayPower(valueWatts);
+  const precision = display.displayUnit === 'kW' ? decimals : 0;
+  return `${display.displayValue.toFixed(precision)} ${display.displayUnit}`;
 }
 
 export function formatEnergy(value: number | null, decimals = 0): string {

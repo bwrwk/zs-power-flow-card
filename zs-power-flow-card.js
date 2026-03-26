@@ -139,6 +139,8 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ${this.renderToggleTile('Pokaz baterie', 'show_battery', config.show_battery ?? true)}
             ${this.renderToggleTile('Animacje przeplywu', 'animation_enabled', config.animation_enabled ?? true)}
             ${this.renderToggleTile('Belka statusu', 'show_status_bar', config.show_status_bar ?? true)}
+            ${this.renderToggleTile('Odwroc znak sieci', 'invert_grid', config.invert_grid ?? false)}
+            ${this.renderToggleTile('Odwroc znak baterii', 'invert_battery', config.invert_battery ?? false)}
           </div>
         </section>
 
@@ -157,6 +159,14 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ${this.renderEntityField('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana do sieci.')}
             ${this.renderEntityField('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia wlozona do baterii.')}
             ${this.renderEntityField('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana z baterii.')}
+            ${this.renderEntityField('Stan baterii', 'battery_state_entity', config.battery_state_entity ?? '', ['sensor'], 'Tekstowy stan baterii, np. idle, charging, discharging.')}
+            ${this.renderEntityField('SOH baterii', 'battery_soh_entity', config.battery_soh_entity ?? '', ['sensor'], 'Kondycja baterii, zwykle procent.')}
+            ${this.renderEntityField('Temperatura baterii', 'battery_temperature_entity', config.battery_temperature_entity ?? '', ['sensor'], 'Temperatura baterii w stopniach C.')}
+            ${this.renderEntityField('Temperatura inwertera', 'inverter_temperature_entity', config.inverter_temperature_entity ?? '', ['sensor'], 'Temperatura inwertera lub sekcji DC.')}
+            ${this.renderEntityField('Alarm urzadzenia', 'device_alarm_entity', config.device_alarm_entity ?? '', ['sensor'], 'Tekstowy alarm inwertera, np. OK lub opis alarmu.')}
+            ${this.renderEntityField('Fault urzadzenia', 'device_fault_entity', config.device_fault_entity ?? '', ['sensor'], 'Tekstowy fault inwertera, np. OK lub opis bledu.')}
+            ${this.renderEntityField('Alarm baterii', 'battery_alarm_entity', config.battery_alarm_entity ?? '', ['binary_sensor', 'sensor'], 'Alarm baterii jako binary sensor lub tekstowy stan.')}
+            ${this.renderEntityField('Fault baterii', 'battery_fault_entity', config.battery_fault_entity ?? '', ['binary_sensor', 'sensor'], 'Fault baterii jako binary sensor lub tekstowy stan.')}
           </div>
         </section>
 
@@ -437,35 +447,67 @@ const THEMES = {
         home: '#f9a8d4',
     },
 };
-const FALLBACK_VALUES = {
-    solar: 4.8,
-    grid: -1.2,
-    batteryPower: -1.6,
+const FALLBACK_VALUES_W = {
+    solar: 4800,
+    grid: -1200,
+    batteryPower: -1600,
     batterySoc: 68,
-    home: 5.2,
+    home: 5200,
 };
-function parseEntityNumber(hass, entityId, fallback) {
+function getEntity(hass, entityId) {
     if (!hass || !entityId)
-        return fallback;
-    const raw = hass.states[entityId]?.state;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : fallback;
+        return undefined;
+    return hass.states[entityId];
 }
-function parseOptionalEntityNumber(hass, entityId) {
-    if (!hass || !entityId)
+function parseRawNumber(entity) {
+    if (!entity)
         return null;
-    const raw = hass.states[entityId]?.state;
-    const parsed = Number(raw);
+    const parsed = Number(entity.state);
     return Number.isFinite(parsed) ? parsed : null;
 }
-function parseEntityText(hass, entityId) {
-    if (!hass || !entityId)
+function getUnit(entity) {
+    const unit = entity?.attributes?.unit_of_measurement;
+    return typeof unit === 'string' ? unit : null;
+}
+function parsePowerWatts(entity, fallbackWatts = 0) {
+    const value = parseRawNumber(entity);
+    if (value === null)
+        return fallbackWatts;
+    const unit = (getUnit(entity) ?? '').toLowerCase();
+    if (unit === 'kw')
+        return value * 1000;
+    return value;
+}
+function parseOptionalEnergyKwh(entity) {
+    const value = parseRawNumber(entity);
+    if (value === null)
         return null;
-    const value = hass.states[entityId]?.state;
+    const unit = (getUnit(entity) ?? '').toLowerCase();
+    if (unit === 'wh')
+        return value / 1000;
+    if (unit === 'mwh')
+        return value * 1000;
+    return value;
+}
+function parseOptionalNumber(entity) {
+    return parseRawNumber(entity);
+}
+function parseEntityText(entity) {
+    const value = entity?.state;
     return value && value !== 'unknown' && value !== 'unavailable' ? value : null;
 }
-function parseGridConnected(hass, entityId) {
-    const state = parseEntityText(hass, entityId)?.toLowerCase();
+function parseOptionalBoolean(entity) {
+    const state = parseEntityText(entity)?.toLowerCase();
+    if (!state)
+        return null;
+    if (['on', 'connected', 'online', 'true', '1', 'ok', 'normal'].includes(state))
+        return true;
+    if (['off', 'disconnected', 'offline', 'false', '0', 'fault', 'alarm'].includes(state))
+        return false;
+    return null;
+}
+function parseGridConnected(entity) {
+    const state = parseEntityText(entity)?.toLowerCase();
     if (!state)
         return null;
     if (['on', 'connected', 'online', 'true', '1'].includes(state))
@@ -477,16 +519,41 @@ function parseGridConnected(hass, entityId) {
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
+function withDisplayPower(valueWatts) {
+    const absolute = Math.abs(valueWatts);
+    if (absolute >= 1000) {
+        return { displayValue: valueWatts / 1000, displayUnit: 'kW' };
+    }
+    return { displayValue: valueWatts, displayUnit: 'W' };
+}
+function createNode(label, valueWatts, accent, secondary) {
+    const display = withDisplayPower(valueWatts);
+    return {
+        label,
+        value: valueWatts,
+        displayValue: display.displayValue,
+        displayUnit: display.displayUnit,
+        accent,
+        secondary,
+    };
+}
 function getThemeTokens(theme) {
     return THEMES[theme ?? 'aurora'];
 }
 function buildSnapshot(hass, config) {
     const themeTokens = getThemeTokens(config.theme);
-    const solar = Math.max(0, parseEntityNumber(hass, config.solar_entity, FALLBACK_VALUES.solar));
-    const grid = parseEntityNumber(hass, config.grid_entity, FALLBACK_VALUES.grid);
-    const batteryPower = parseEntityNumber(hass, config.battery_power_entity, FALLBACK_VALUES.batteryPower);
-    const home = Math.max(0, parseEntityNumber(hass, config.home_entity, FALLBACK_VALUES.home));
-    const socValue = parseEntityNumber(hass, config.battery_soc_entity, FALLBACK_VALUES.batterySoc);
+    const solarEntity = getEntity(hass, config.solar_entity);
+    const gridEntity = getEntity(hass, config.grid_entity);
+    const batteryEntity = getEntity(hass, config.battery_power_entity);
+    const homeEntity = getEntity(hass, config.home_entity);
+    const socEntity = getEntity(hass, config.battery_soc_entity);
+    const solar = Math.max(0, parsePowerWatts(solarEntity, FALLBACK_VALUES_W.solar));
+    const gridBase = parsePowerWatts(gridEntity, FALLBACK_VALUES_W.grid);
+    const batteryBase = parsePowerWatts(batteryEntity, FALLBACK_VALUES_W.batteryPower);
+    const home = Math.max(0, parsePowerWatts(homeEntity, FALLBACK_VALUES_W.home));
+    const grid = (config.invert_grid ? -1 : 1) * gridBase;
+    const batteryPower = (config.invert_battery ? -1 : 1) * batteryBase;
+    const socValue = parseOptionalNumber(socEntity) ?? FALLBACK_VALUES_W.batterySoc;
     const soc = Number.isFinite(socValue) ? clamp(socValue, 0, 100) : null;
     const batteryCapacity = config.battery_capacity_kwh ?? 0;
     const solarToHome = Math.min(solar, home);
@@ -497,39 +564,18 @@ function buildSnapshot(hass, config) {
     const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
     const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
     const netHomeDemand = home - solar;
-    const gridConnected = parseGridConnected(hass, config.grid_connected_entity);
-    const inverterStatus = parseEntityText(hass, config.inverter_status_entity);
+    const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
+    const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
+    const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
     return {
-        solar: {
-            label: config.solar_label ?? 'Produkcja',
-            value: solar,
-            unit: 'kW',
-            accent: themeTokens.solar,
-            secondary: 'PV',
-        },
-        grid: {
-            label: config.grid_label ?? 'Siec',
-            value: grid,
-            unit: 'kW',
-            accent: themeTokens.grid,
-            secondary: grid >= 0 ? 'Import' : 'Eksport',
-        },
+        solar: createNode(config.solar_label ?? 'Produkcja', solar, themeTokens.solar, 'PV'),
+        grid: createNode(config.grid_label ?? 'Siec', grid, themeTokens.grid, grid >= 0 ? 'Import' : 'Eksport'),
         battery: {
-            label: config.battery_label ?? 'Magazyn',
-            value: batteryPower,
-            unit: 'kW',
-            accent: themeTokens.battery,
-            secondary: soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`,
+            ...createNode(config.battery_label ?? 'Magazyn', batteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
             soc,
             mode: batteryPower > 0 ? 'discharging' : batteryPower < 0 ? 'charging' : 'idle',
         },
-        home: {
-            label: config.home_label ?? 'Dom',
-            value: home,
-            unit: 'kW',
-            accent: themeTokens.home,
-            secondary: 'Zuzycie',
-        },
+        home: createNode(config.home_label ?? 'Dom', home, themeTokens.home, 'Zuzycie'),
         solarToHome,
         solarToBattery,
         solarToGrid,
@@ -539,18 +585,28 @@ function buildSnapshot(hass, config) {
         netHomeDemand,
         gridConnected,
         inverterStatus,
+        batteryState,
+        batterySoh: parseOptionalNumber(getEntity(hass, config.battery_soh_entity)),
+        batteryTemperature: parseOptionalNumber(getEntity(hass, config.battery_temperature_entity)),
+        inverterTemperature: parseOptionalNumber(getEntity(hass, config.inverter_temperature_entity)),
+        deviceAlarm: parseEntityText(getEntity(hass, config.device_alarm_entity)),
+        deviceFault: parseEntityText(getEntity(hass, config.device_fault_entity)),
+        batteryAlarm: parseOptionalBoolean(getEntity(hass, config.battery_alarm_entity)),
+        batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
         dailyEnergy: {
-            solar: parseOptionalEntityNumber(hass, config.daily_solar_energy_entity),
-            home: parseOptionalEntityNumber(hass, config.daily_home_energy_entity),
-            gridImport: parseOptionalEntityNumber(hass, config.daily_grid_import_energy_entity),
-            gridExport: parseOptionalEntityNumber(hass, config.daily_grid_export_energy_entity),
-            batteryCharge: parseOptionalEntityNumber(hass, config.daily_battery_charge_energy_entity),
-            batteryDischarge: parseOptionalEntityNumber(hass, config.daily_battery_discharge_energy_entity),
+            solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
+            home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
+            gridImport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity)),
+            gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+            batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
+            batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
         },
     };
 }
-function formatPower(value, decimals = 1) {
-    return `${value.toFixed(decimals)} kW`;
+function formatPower(valueWatts, decimals = 1) {
+    const display = withDisplayPower(valueWatts);
+    const precision = display.displayUnit === 'kW' ? decimals : 0;
+    return `${display.displayValue.toFixed(precision)} ${display.displayUnit}`;
 }
 function formatEnergy(value, decimals = 0) {
     if (value === null)
@@ -644,6 +700,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : A}
+          ${advanced ? this.renderHealthRail(snapshot) : A}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : A}
         </section>
       </ha-card>
@@ -806,12 +863,38 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <div class="rail-card">
           <span>Stan magazynu</span>
           <strong>${this.describeBatteryStatus(snapshot)}</strong>
-          <small>${snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`}</small>
+          <small>${snapshot.batteryState ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
           <span>Tryb polaczenia</span>
           <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
+        </div>
+      </section>
+    `;
+    }
+    renderHealthRail(snapshot) {
+        return b `
+      <section class="health-rail">
+        <div class="health-card">
+          <span>Kondycja baterii</span>
+          <strong>${snapshot.batterySoh === null ? '--' : `${snapshot.batterySoh.toFixed(1)}% SOH`}</strong>
+          <small>${snapshot.batteryTemperature === null ? 'Temp. baterii --' : `Temp. baterii ${snapshot.batteryTemperature.toFixed(0)}°C`}</small>
+        </div>
+        <div class="health-card">
+          <span>Temperatura falownika</span>
+          <strong>${snapshot.inverterTemperature === null ? '--' : `${snapshot.inverterTemperature.toFixed(0)}°C`}</strong>
+          <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
+        </div>
+        <div class="health-card ${this.isHealthy(snapshot.deviceAlarm) ? '' : 'warn'}">
+          <span>Alarm urzadzenia</span>
+          <strong>${snapshot.deviceAlarm ?? '--'}</strong>
+          <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
+        </div>
+        <div class="health-card ${snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn'}">
+          <span>Alarm baterii</span>
+          <strong>${this.describeBinaryHealth(snapshot.batteryAlarm)}</strong>
+          <small>Fault: ${this.describeBinaryHealth(snapshot.batteryFault)}</small>
         </div>
       </section>
     `;
@@ -835,11 +918,35 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         return 'Przeplyw stabilny';
     }
     describeBatteryStatus(snapshot) {
+        if (snapshot.batteryState)
+            return this.formatStatusLabel(snapshot.batteryState);
         if (snapshot.battery.mode === 'charging')
             return 'Ladowanie';
         if (snapshot.battery.mode === 'discharging')
             return 'Rozladowanie';
         return 'Stabilny bufor';
+    }
+    formatStatusLabel(value) {
+        const normalized = value.toLowerCase();
+        if (normalized === 'idle')
+            return 'Idle';
+        if (normalized === 'charging')
+            return 'Ladowanie';
+        if (normalized === 'discharging')
+            return 'Rozladowanie';
+        if (normalized === 'normal')
+            return 'Normal';
+        return value;
+    }
+    isHealthy(value) {
+        if (!value)
+            return true;
+        return ['ok', 'normal', 'none', 'idle'].includes(value.toLowerCase());
+    }
+    describeBinaryHealth(value) {
+        if (value === null)
+            return '--';
+        return value ? 'Alarm' : 'OK';
     }
 };
 ZsPowerFlowCard.styles = i$3 `
@@ -1190,6 +1297,13 @@ ZsPowerFlowCard.styles = i$3 `
       margin-top: 16px;
     }
 
+    .health-rail {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
     .rail-card {
       padding: 14px 16px;
       border-radius: 18px;
@@ -1197,6 +1311,32 @@ ZsPowerFlowCard.styles = i$3 `
         linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
         rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .health-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .health-card.warn {
+      border-color: rgba(248, 113, 113, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+    }
+
+    .health-card span,
+    .health-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .health-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.02rem;
     }
 
     .rail-card span,
@@ -1302,6 +1442,10 @@ ZsPowerFlowCard.styles = i$3 `
       .advanced-rail {
         grid-template-columns: 1fr;
       }
+
+      .health-rail {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -1367,6 +1511,10 @@ ZsPowerFlowCard.styles = i$3 `
 
       .advanced-rail {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .health-rail {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
       }
     }
 

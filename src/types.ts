@@ -23,6 +23,14 @@ export interface ZsPowerFlowCardConfig {
   daily_grid_export_energy_entity?: string;
   daily_battery_charge_energy_entity?: string;
   daily_battery_discharge_energy_entity?: string;
+  battery_state_entity?: string;
+  battery_soh_entity?: string;
+  battery_temperature_entity?: string;
+  inverter_temperature_entity?: string;
+  device_alarm_entity?: string;
+  device_fault_entity?: string;
+  battery_alarm_entity?: string;
+  battery_fault_entity?: string;
   battery_capacity_kwh?: number;
   theme?: FlowTheme;
   layout?: FlowLayout;
@@ -34,6 +42,8 @@ export interface ZsPowerFlowCardConfig {
   show_battery?: boolean;
   animation_enabled?: boolean;
   show_status_bar?: boolean;
+  invert_grid?: boolean;
+  invert_battery?: boolean;
   decimals?: number;
   solar_label?: string;
   grid_label?: string;
@@ -44,7 +54,8 @@ export interface ZsPowerFlowCardConfig {
 export interface FlowNodeData {
   label: string;
   value: number;
-  unit: string;
+  displayValue: number;
+  displayUnit: 'W' | 'kW';
   accent: string;
   secondary: string;
 }
@@ -63,6 +74,14 @@ export interface PowerFlowSnapshot {
   netHomeDemand: number;
   gridConnected: boolean | null;
   inverterStatus: string | null;
+  batteryState: string | null;
+  batterySoh: number | null;
+  batteryTemperature: number | null;
+  inverterTemperature: number | null;
+  deviceAlarm: string | null;
+  deviceFault: string | null;
+  batteryAlarm: boolean | null;
+  batteryFault: boolean | null;
   dailyEnergy: {
     solar: number | null;
     home: number | null;

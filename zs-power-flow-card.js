@@ -740,6 +740,8 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             battery: '',
             home: '',
         };
+        this._stageSize = { width: 640, height: 420 };
+        this._flowFrame = 0;
     }
     static getConfigElement() {
         return document.createElement('zs-power-flow-card-editor');
@@ -763,13 +765,15 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     disconnectedCallback() {
         this._resizeObserver?.disconnect();
         this._resizeObserver = undefined;
+        cancelAnimationFrame(this._flowFrame);
         super.disconnectedCallback();
     }
     firstUpdated() {
-        this._resizeObserver?.observe(this);
+        this.observeFlowLayout();
         this.scheduleFlowPathUpdate();
     }
     updated() {
+        this.observeFlowLayout();
         this.scheduleFlowPathUpdate();
     }
     render() {
@@ -937,8 +941,18 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         const style = this._config.flow_style ?? 'soft';
         const directionClass = direction === 'reverse' ? 'reverse' : 'forward';
         return b `
-      <svg class="flow" viewBox="0 0 640 420" preserveAspectRatio="none" aria-hidden="true">
+      <svg
+        class="flow"
+        viewBox=${`0 0 ${Math.max(1, this._stageSize.width)} ${Math.max(1, this._stageSize.height)}`}
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         <path class="flow-track" d=${path}></path>
+        <path
+          class="flow-base"
+          style=${`--flow-color:${color}; --flow-width:${Math.max(2, width - 0.3)}px;`}
+          d=${path}
+        ></path>
         <path
           class=${`flow-aura ${style} ${active ? 'visible' : ''}`}
           style=${`--flow-color:${color}; --flow-width:${width + 4}px; --flow-opacity:${glow};`}
@@ -953,7 +967,16 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     `;
     }
     scheduleFlowPathUpdate() {
-        requestAnimationFrame(() => this.updateFlowPaths());
+        cancelAnimationFrame(this._flowFrame);
+        this._flowFrame = requestAnimationFrame(() => this.updateFlowPaths());
+    }
+    observeFlowLayout() {
+        if (!this._resizeObserver)
+            return;
+        this._resizeObserver.disconnect();
+        this._resizeObserver.observe(this);
+        const elements = this.renderRoot.querySelectorAll('.stage, .core, .node, .flow-anchor');
+        elements.forEach((element) => this._resizeObserver?.observe(element));
     }
     updateFlowPaths() {
         const stage = this._stageEl;
@@ -961,6 +984,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (!stage || !core)
             return;
         const stageRect = stage.getBoundingClientRect();
+        const nextStageSize = {
+            width: Math.round(stageRect.width),
+            height: Math.round(stageRect.height),
+        };
         const anchors = {
             solar: stage.querySelector('.node-anchor.solar')?.getBoundingClientRect(),
             grid: stage.querySelector('.node-anchor.grid')?.getBoundingClientRect(),
@@ -977,6 +1004,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
             home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
         };
+        if (nextStageSize.width !== this._stageSize.width ||
+            nextStageSize.height !== this._stageSize.height) {
+            this._stageSize = nextStageSize;
+        }
         if (JSON.stringify(nextPaths) !== JSON.stringify(this._flowPaths)) {
             this._flowPaths = nextPaths;
         }
@@ -1391,13 +1422,13 @@ ZsPowerFlowCard.styles = i$3 `
     }
 
     .node-anchor.battery {
-      right: 14px;
-      top: 18px;
+      right: 8px;
+      top: calc(50% - 4px);
     }
 
     .node-anchor.home {
       left: 8px;
-      top: 22px;
+      top: calc(50% - 4px);
     }
 
     .core-anchor.top-left {
@@ -1570,6 +1601,15 @@ ZsPowerFlowCard.styles = i$3 `
       stroke: rgba(255, 255, 255, 0.06);
       stroke-width: 2;
       stroke-linecap: round;
+    }
+
+    .flow-base {
+      fill: none;
+      stroke: color-mix(in srgb, var(--flow-color) 26%, rgba(255, 255, 255, 0.05));
+      stroke-width: var(--flow-width);
+      stroke-linecap: round;
+      opacity: 0.72;
+      filter: drop-shadow(0 0 8px color-mix(in srgb, var(--flow-color) 16%, transparent));
     }
 
     .flow-aura {
@@ -2000,6 +2040,9 @@ __decorate([
 __decorate([
     r()
 ], ZsPowerFlowCard.prototype, "_flowPaths", void 0);
+__decorate([
+    r()
+], ZsPowerFlowCard.prototype, "_stageSize", void 0);
 ZsPowerFlowCard = __decorate([
     t('zs-power-flow-card')
 ], ZsPowerFlowCard);

@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, query, state } from 'lit/decorators.js';
 import './editor';
 import { buildSnapshot, formatEnergy, formatKwh, formatPower, getThemeTokens, prettifyStatus } from './presenters';
 import { HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
@@ -33,6 +33,15 @@ const DEFAULT_CONFIG: ZsPowerFlowCardConfig = {
 export class ZsPowerFlowCard extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistantLike;
   @property({ attribute: false }) private _config: ZsPowerFlowCardConfig = DEFAULT_CONFIG;
+  @query('.stage') private _stageEl?: HTMLElement;
+  @query('.core') private _coreEl?: HTMLElement;
+  @state() private _flowPaths: Record<'solar' | 'grid' | 'battery' | 'home', string> = {
+    solar: '',
+    grid: '',
+    battery: '',
+    home: '',
+  };
+  private _resizeObserver?: ResizeObserver;
 
   public static getConfigElement(): HTMLElement {
     return document.createElement('zs-power-flow-card-editor');
@@ -51,6 +60,26 @@ export class ZsPowerFlowCard extends LitElement {
 
   public getCardSize(): number {
     return this._config.view_mode === 'advanced' ? 6 : 4;
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this._resizeObserver = new ResizeObserver(() => this.scheduleFlowPathUpdate());
+  }
+
+  disconnectedCallback(): void {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
+    super.disconnectedCallback();
+  }
+
+  protected firstUpdated(): void {
+    this._resizeObserver?.observe(this);
+    this.scheduleFlowPathUpdate();
+  }
+
+  protected updated(): void {
+    this.scheduleFlowPathUpdate();
   }
 
   protected render() {
@@ -93,7 +122,7 @@ export class ZsPowerFlowCard extends LitElement {
               ? this.renderFlow({
                   power: snapshot.solar.value,
                   color: snapshot.solar.accent,
-                  path: 'M 224 164 C 250 160, 272 170, 296 190',
+                  path: this._flowPaths.solar,
                   direction: 'forward',
                 })
               : nothing}
@@ -101,7 +130,7 @@ export class ZsPowerFlowCard extends LitElement {
               ? this.renderFlow({
                   power: Math.abs(snapshot.grid.value),
                   color: snapshot.grid.accent,
-                  path: 'M 474 178 C 444 174, 418 182, 394 198',
+                  path: this._flowPaths.grid,
                   direction: snapshot.grid.value >= 0 ? 'forward' : 'reverse',
                 })
               : nothing}
@@ -109,14 +138,14 @@ export class ZsPowerFlowCard extends LitElement {
               ? this.renderFlow({
                   power: Math.abs(snapshot.battery.value),
                   color: snapshot.battery.accent,
-                  path: 'M 224 298 C 250 306, 272 296, 296 274',
+                  path: this._flowPaths.battery,
                   direction: snapshot.battery.value > 0 ? 'forward' : 'reverse',
                 })
               : nothing}
             ${this.renderFlow({
               power: snapshot.home.value,
               color: snapshot.home.accent,
-              path: 'M 396 274 C 426 292, 452 302, 476 304',
+              path: this._flowPaths.home,
               direction: 'forward',
             })}
           </div>
@@ -227,6 +256,7 @@ export class ZsPowerFlowCard extends LitElement {
     path: string;
     direction: 'forward' | 'reverse';
   }) {
+    if (!path) return nothing;
     const active = power > 12;
     const width = Math.max(2, Math.min(8, Math.abs(power) < 250 ? 2.6 : Math.abs(power) / 420));
     const animate = this._config.animation_enabled ?? true;
@@ -249,6 +279,108 @@ export class ZsPowerFlowCard extends LitElement {
         ></path>
       </svg>
     `;
+  }
+
+  private scheduleFlowPathUpdate() {
+    requestAnimationFrame(() => this.updateFlowPaths());
+  }
+
+  private updateFlowPaths() {
+    const stage = this._stageEl;
+    const core = this._coreEl;
+    if (!stage || !core) return;
+
+    const stageRect = stage.getBoundingClientRect();
+    const coreRect = core.getBoundingClientRect();
+
+    const sourceRects = {
+      solar: stage.querySelector<HTMLElement>('.node.top.left')?.getBoundingClientRect(),
+      grid: stage.querySelector<HTMLElement>('.node.top.right')?.getBoundingClientRect(),
+      battery: stage.querySelector<HTMLElement>('.node.bottom.left')?.getBoundingClientRect(),
+      home: stage.querySelector<HTMLElement>('.node.bottom.right')?.getBoundingClientRect(),
+    };
+
+    const coreCenter = {
+      x: coreRect.left - stageRect.left + coreRect.width / 2,
+      y: coreRect.top - stageRect.top + coreRect.height / 2,
+    };
+    const coreRadius = Math.min(coreRect.width, coreRect.height) * 0.5 + 8;
+
+    const nextPaths = {
+      solar: this.buildHubPath(sourceRects.solar, stageRect, coreCenter, coreRadius, 'left'),
+      grid: this.buildHubPath(sourceRects.grid, stageRect, coreCenter, coreRadius, 'right'),
+      battery: this.buildHubPath(sourceRects.battery, stageRect, coreCenter, coreRadius, 'bottom-left'),
+      home: this.buildHubPath(sourceRects.home, stageRect, coreCenter, coreRadius, 'bottom-right', true),
+    };
+
+    if (JSON.stringify(nextPaths) !== JSON.stringify(this._flowPaths)) {
+      this._flowPaths = nextPaths;
+    }
+  }
+
+  private buildHubPath(
+    rect: DOMRect | undefined,
+    stageRect: DOMRect,
+    coreCenter: { x: number; y: number },
+    coreRadius: number,
+    anchor: 'left' | 'right' | 'bottom-left' | 'bottom-right',
+    fromHub = false,
+  ): string {
+    if (!rect) return '';
+
+    const node = {
+      left: rect.left - stageRect.left,
+      top: rect.top - stageRect.top,
+      right: rect.right - stageRect.left,
+      bottom: rect.bottom - stageRect.top,
+      width: rect.width,
+      height: rect.height,
+      centerX: rect.left - stageRect.left + rect.width / 2,
+      centerY: rect.top - stageRect.top + rect.height / 2,
+    };
+
+    let start = { x: node.right, y: node.centerY };
+    let end = { x: coreCenter.x - coreRadius, y: coreCenter.y };
+
+    if (anchor === 'right') {
+      start = { x: node.left, y: node.centerY };
+      end = { x: coreCenter.x + coreRadius, y: coreCenter.y };
+    } else if (anchor === 'bottom-left') {
+      start = { x: node.right - 6, y: node.top + node.height * 0.18 };
+      end = { x: coreCenter.x - coreRadius * 0.78, y: coreCenter.y + coreRadius * 0.72 };
+    } else if (anchor === 'bottom-right') {
+      start = { x: coreCenter.x + coreRadius * 0.86, y: coreCenter.y + coreRadius * 0.68 };
+      end = { x: node.left + 8, y: node.top + node.height * 0.18 };
+    }
+
+    const fromPoint = fromHub ? start : start;
+    const toPoint = fromHub ? end : end;
+
+    const control1 = this.computeControlPoint(fromPoint, toPoint, anchor, true);
+    const control2 = this.computeControlPoint(fromPoint, toPoint, anchor, false);
+
+    return `M ${fromPoint.x.toFixed(1)} ${fromPoint.y.toFixed(1)} C ${control1.x.toFixed(1)} ${control1.y.toFixed(1)}, ${control2.x.toFixed(1)} ${control2.y.toFixed(1)}, ${toPoint.x.toFixed(1)} ${toPoint.y.toFixed(1)}`;
+  }
+
+  private computeControlPoint(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    anchor: 'left' | 'right' | 'bottom-left' | 'bottom-right',
+    first: boolean,
+  ) {
+    const mx = (from.x + to.x) / 2;
+    const my = (from.y + to.y) / 2;
+
+    if (anchor === 'left') {
+      return first ? { x: mx - 34, y: from.y - 8 } : { x: mx + 10, y: to.y - 2 };
+    }
+    if (anchor === 'right') {
+      return first ? { x: mx + 34, y: from.y - 8 } : { x: mx - 10, y: to.y - 2 };
+    }
+    if (anchor === 'bottom-left') {
+      return first ? { x: from.x + 40, y: from.y + 18 } : { x: to.x - 16, y: my + 18 };
+    }
+    return first ? { x: from.x + 18, y: my + 18 } : { x: to.x - 44, y: to.y + 10 };
   }
 
   private renderDetails(snapshot: PowerFlowSnapshot, advanced: boolean) {

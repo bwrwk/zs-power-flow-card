@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import './editor';
 import { buildSnapshot, formatEnergy, formatPower, getThemeTokens } from './presenters';
 import { HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
 
@@ -14,7 +15,13 @@ const DEFAULT_CONFIG: ZsPowerFlowCardConfig = {
   title: 'Power Flow',
   battery_capacity_kwh: 10,
   theme: 'aurora',
+  layout: 'balanced',
   show_details: true,
+  details_mode: 'summary',
+  show_solar: true,
+  show_grid: true,
+  show_battery: true,
+  animation_enabled: true,
   decimals: 1,
 };
 
@@ -24,7 +31,7 @@ export class ZsPowerFlowCard extends LitElement {
   @property({ attribute: false }) private _config: ZsPowerFlowCardConfig = DEFAULT_CONFIG;
 
   public static getConfigElement(): HTMLElement {
-    return document.createElement('div');
+    return document.createElement('zs-power-flow-card-editor');
   }
 
   public static getStubConfig(): ZsPowerFlowCardConfig {
@@ -45,6 +52,7 @@ export class ZsPowerFlowCard extends LitElement {
   protected render() {
     const snapshot = buildSnapshot(this.hass, this._config);
     const theme = getThemeTokens(this._config.theme);
+    const layoutClass = this._config.layout === 'focus-home' ? 'layout-focus-home' : 'layout-balanced';
 
     return html`
       <ha-card
@@ -59,18 +67,24 @@ export class ZsPowerFlowCard extends LitElement {
             <div class="status-pill">${this.describeSystemBalance(snapshot)}</div>
           </div>
 
-          <div class="stage">
-            ${this.renderNode(snapshot.solar, 'top left', '☀')}
-            ${this.renderNode(snapshot.grid, 'top right', '⇄')}
+          <div class=${`stage ${layoutClass}`}>
+            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', '☀') : nothing}
+            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', '⇄') : nothing}
             ${this.renderCore(snapshot)}
-            ${this.renderNode(snapshot.battery, 'bottom left', '▣', snapshot.battery.soc)}
+            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', '▣', snapshot.battery.soc) : nothing}
             ${this.renderNode(snapshot.home, 'bottom right', '⌂')}
 
-            ${this.renderFlow('solar-home', snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208')}
-            ${this.renderFlow('solar-battery', snapshot.solarToBattery, snapshot.battery.accent, 'M 170 165 C 170 255, 210 288, 305 310')}
-            ${this.renderFlow('solar-grid', snapshot.solarToGrid, snapshot.grid.accent, 'M 240 120 C 345 100, 400 110, 470 130')}
-            ${this.renderFlow('grid-home', snapshot.gridToHome, snapshot.grid.accent, 'M 493 160 C 493 236, 468 270, 396 308')}
-            ${this.renderFlow('battery-home', snapshot.batteryToHome, snapshot.battery.accent, 'M 355 324 C 410 338, 455 334, 505 318')}
+            ${this._config.show_solar ? this.renderFlow('solar-home', snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : nothing}
+            ${this._config.show_solar && this._config.show_battery
+              ? this.renderFlow('solar-battery', snapshot.solarToBattery, snapshot.battery.accent, 'M 170 165 C 170 255, 210 288, 305 310')
+              : nothing}
+            ${this._config.show_solar && this._config.show_grid
+              ? this.renderFlow('solar-grid', snapshot.solarToGrid, snapshot.grid.accent, 'M 240 120 C 345 100, 400 110, 470 130')
+              : nothing}
+            ${this._config.show_grid ? this.renderFlow('grid-home', snapshot.gridToHome, snapshot.grid.accent, 'M 493 160 C 493 236, 468 270, 396 308') : nothing}
+            ${this._config.show_battery
+              ? this.renderFlow('battery-home', snapshot.batteryToHome, snapshot.battery.accent, 'M 355 324 C 410 338, 455 334, 505 318')
+              : nothing}
           </div>
 
           ${this._config.show_details ? this.renderDetails(snapshot) : nothing}
@@ -85,7 +99,7 @@ export class ZsPowerFlowCard extends LitElement {
         <div class="core-ring"></div>
         <div class="core-content">
           <span class="core-label">Bilans</span>
-          <strong>${formatPower(snapshot.home.value - snapshot.solar.value, this._config.decimals ?? 1)}</strong>
+          <strong>${formatPower(snapshot.netHomeDemand, this._config.decimals ?? 1)}</strong>
           <small>zapotrzebowanie netto</small>
         </div>
       </div>
@@ -114,12 +128,14 @@ export class ZsPowerFlowCard extends LitElement {
   private renderFlow(id: string, power: number, color: string, path: string) {
     const active = power > 0.05;
     const width = Math.max(2, Math.min(10, power * 2.2));
+    const animate = this._config.animation_enabled ?? true;
 
     return html`
       <svg class="flow" viewBox="0 0 640 420" preserveAspectRatio="none" aria-hidden="true">
         <path class="flow-track" d=${path}></path>
         <path
-          class=${`flow-line ${active ? 'active' : ''}`}
+          data-flow-id=${id}
+          class=${`flow-line ${active && animate ? 'active' : ''} ${active ? 'visible' : ''}`}
           style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.4, 8 - power)}s;`}
           d=${path}
         ></path>
@@ -128,9 +144,7 @@ export class ZsPowerFlowCard extends LitElement {
   }
 
   private renderDetails(snapshot: PowerFlowSnapshot) {
-    const batteryCapacity = this._config.battery_capacity_kwh ?? 0;
-    const soc = snapshot.battery.soc ?? 0;
-    const stored = batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
+    const extended = this._config.details_mode === 'extended';
 
     return html`
       <section class="details">
@@ -148,8 +162,20 @@ export class ZsPowerFlowCard extends LitElement {
         </div>
         <div class="detail-card">
           <span>Energie w baterii</span>
-          <strong>${stored === null ? '--' : `${stored.toFixed(1)} kWh`}</strong>
+          <strong>${snapshot.batteryStoredKwh === null ? '--' : `${snapshot.batteryStoredKwh.toFixed(1)} kWh`}</strong>
         </div>
+        ${extended
+          ? html`
+              <div class="detail-card">
+                <span>Eksport do sieci</span>
+                <strong>${formatPower(snapshot.solarToGrid, this._config.decimals ?? 1)}</strong>
+              </div>
+              <div class="detail-card">
+                <span>Oddawanie z baterii</span>
+                <strong>${formatPower(snapshot.batteryToHome, this._config.decimals ?? 1)}</strong>
+              </div>
+            `
+          : nothing}
       </section>
     `;
   }
@@ -235,6 +261,15 @@ export class ZsPowerFlowCard extends LitElement {
         linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
         rgba(7, 10, 18, 0.16);
       border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .stage.layout-focus-home .core {
+      width: 184px;
+      height: 184px;
+    }
+
+    .stage.layout-focus-home .bottom.right {
+      width: 190px;
     }
 
     .core {
@@ -366,6 +401,10 @@ export class ZsPowerFlowCard extends LitElement {
       stroke-dasharray: 8 14;
       opacity: 0.15;
       filter: drop-shadow(0 0 10px color-mix(in srgb, var(--flow-color) 55%, transparent));
+    }
+
+    .flow-line.visible {
+      opacity: 1;
     }
 
     .flow-line.active {

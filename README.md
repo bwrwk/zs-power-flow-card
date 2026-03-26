@@ -12,6 +12,7 @@ Wersja `0.1.0` to MVP z:
 - nowoczesnym ukladem `solar / grid / battery / home`,
 - animowanymi liniami przeplywu energii,
 - prostym API konfiguracyjnym opartym o encje Home Assistanta,
+- prostym editorem Lovelace do podpiania encji i wyboru motywu,
 - fallbackiem demo, gdy encje nie sa jeszcze podpiete.
 
 ## Instalacja developerska
@@ -35,6 +36,9 @@ battery_soc_entity: sensor.battery_soc
 home_entity: sensor.home_load
 battery_capacity_kwh: 15
 theme: aurora
+layout: focus-home
+details_mode: extended
+animation_enabled: true
 show_details: true
 ```
 

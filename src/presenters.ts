@@ -60,12 +60,14 @@ export function buildSnapshot(
   hass: HomeAssistantLike | undefined,
   config: ZsPowerFlowCardConfig,
 ): PowerFlowSnapshot {
+  const themeTokens = getThemeTokens(config.theme);
   const solar = Math.max(0, parseEntityNumber(hass, config.solar_entity, FALLBACK_VALUES.solar));
   const grid = parseEntityNumber(hass, config.grid_entity, FALLBACK_VALUES.grid);
   const batteryPower = parseEntityNumber(hass, config.battery_power_entity, FALLBACK_VALUES.batteryPower);
   const home = Math.max(0, parseEntityNumber(hass, config.home_entity, FALLBACK_VALUES.home));
   const socValue = parseEntityNumber(hass, config.battery_soc_entity, FALLBACK_VALUES.batterySoc);
   const soc = Number.isFinite(socValue) ? clamp(socValue, 0, 100) : null;
+  const batteryCapacity = config.battery_capacity_kwh ?? 0;
 
   const solarToHome = Math.min(solar, home);
   const remainingSolar = Math.max(0, solar - solarToHome);
@@ -73,27 +75,29 @@ export function buildSnapshot(
   const solarToGrid = Math.max(0, remainingSolar - solarToBattery);
   const batteryToHome = batteryPower > 0 ? Math.min(home, batteryPower) : 0;
   const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
+  const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
+  const netHomeDemand = home - solar;
 
   return {
     solar: {
       label: config.solar_label ?? 'Produkcja',
       value: solar,
       unit: 'kW',
-      accent: getThemeTokens(config.theme).solar,
+      accent: themeTokens.solar,
       secondary: 'PV',
     },
     grid: {
       label: config.grid_label ?? 'Siec',
       value: grid,
       unit: 'kW',
-      accent: getThemeTokens(config.theme).grid,
+      accent: themeTokens.grid,
       secondary: grid >= 0 ? 'Import' : 'Eksport',
     },
     battery: {
       label: config.battery_label ?? 'Magazyn',
       value: batteryPower,
       unit: 'kW',
-      accent: getThemeTokens(config.theme).battery,
+      accent: themeTokens.battery,
       secondary: soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`,
       soc,
       mode: batteryPower > 0 ? 'discharging' : batteryPower < 0 ? 'charging' : 'idle',
@@ -102,7 +106,7 @@ export function buildSnapshot(
       label: config.home_label ?? 'Dom',
       value: home,
       unit: 'kW',
-      accent: getThemeTokens(config.theme).home,
+      accent: themeTokens.home,
       secondary: 'Zuzycie',
     },
     solarToHome,
@@ -110,6 +114,8 @@ export function buildSnapshot(
     solarToGrid,
     gridToHome,
     batteryToHome,
+    batteryStoredKwh,
+    netHomeDemand,
   };
 }
 

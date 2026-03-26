@@ -6,7 +6,7 @@ To jest autorska implementacja inspirowana ogolnym pomyslem kart typu power flow
 
 ## Status
 
-Wersja `0.3.0` to juz uzywalna baza pod publiczna karte:
+Wersja `1.0.0` to pierwsze stabilne wydanie:
 
 - nowoczesny uklad `solar / grid / battery / home`,
 - animowane flow z poprawiona geometria i stabilnym resize,
@@ -19,6 +19,20 @@ Wersja `0.3.0` to juz uzywalna baza pod publiczna karte:
 - statusy health i alarmow,
 - akcje `tap` i `hold`,
 - harness do lokalnych testow wizualnych.
+
+Dokumenty pomocnicze:
+
+- [CONFIG_REFERENCE.md](C:\Users\User\Codex\Karty%20ha\zs-power-flow-card\CONFIG_REFERENCE.md)
+- [CHANGELOG.md](C:\Users\User\Codex\Karty%20ha\zs-power-flow-card\CHANGELOG.md)
+- [LICENSE](C:\Users\User\Codex\Karty%20ha\zs-power-flow-card\LICENSE)
+
+## Licencja
+
+Projekt jest obecnie `UNLICENSED / All Rights Reserved`.
+
+- komercyjne uzycie wymaga osobnej zgody lub licencji,
+- kod nie jest obecnie udostepniony jako open source,
+- w przyszlosci licencja moze zostac zmieniona, ale na teraz prawa pozostaja zastrzezone.
 
 ## Instalacja developerska
 
@@ -110,4 +124,4 @@ http://localhost:4173/visual/index.html
 - jeszcze lepszy wizard i onboarding,
 - testy screenshotowe w przegladarce,
 - dodatkowe warianty analytics i layoutow,
-- stabilizacja API configu pod `v1.0`.
+- dopracowanie kolejnych wydań po `1.0`.

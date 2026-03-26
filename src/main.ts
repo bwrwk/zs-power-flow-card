@@ -29,6 +29,34 @@ const DEFAULT_CONFIG: ZsPowerFlowCardConfig = {
   decimals: 1,
 };
 
+function normalizeActionConfig(actionConfig?: ZsPowerFlowCardConfig['tap_action']) {
+  const action = actionConfig?.action ?? 'more-info';
+  if (action === 'navigate') {
+    return {
+      action,
+      navigation_path: actionConfig?.navigation_path,
+    };
+  }
+  if (action === 'url') {
+    return {
+      action,
+      url_path: actionConfig?.url_path,
+    };
+  }
+  return { action };
+}
+
+function normalizeConfig(config: ZsPowerFlowCardConfig): ZsPowerFlowCardConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    power_noise_floor_w: Math.max(0, config.power_noise_floor_w ?? DEFAULT_CONFIG.power_noise_floor_w ?? 30),
+    decimals: Math.max(0, Math.min(3, config.decimals ?? DEFAULT_CONFIG.decimals ?? 1)),
+    tap_action: normalizeActionConfig(config.tap_action),
+    hold_action: normalizeActionConfig(config.hold_action),
+  };
+}
+
 @customElement('zs-power-flow-card')
 export class ZsPowerFlowCard extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistantLike;
@@ -59,7 +87,7 @@ export class ZsPowerFlowCard extends LitElement {
     if (!config?.type) {
       throw new Error('Config requires a type.');
     }
-    this._config = { ...DEFAULT_CONFIG, ...config };
+    this._config = normalizeConfig(config);
   }
 
   public getCardSize(): number {
@@ -195,6 +223,7 @@ export class ZsPowerFlowCard extends LitElement {
         <span class="flow-anchor core-anchor top-right"></span>
         <span class="flow-anchor core-anchor bottom-left"></span>
         <span class="flow-anchor core-anchor bottom-right"></span>
+        <div class="core-shield"></div>
         <div class="core-ring"></div>
         <div class="core-ring pulse"></div>
         <div class="core-content">
@@ -952,6 +981,7 @@ export class ZsPowerFlowCard extends LitElement {
       display: grid;
       place-items: center;
       z-index: 4;
+      isolation: isolate;
     }
 
     .flow-anchor {
@@ -1008,6 +1038,19 @@ export class ZsPowerFlowCard extends LitElement {
       height: 188px;
     }
 
+    .core-shield {
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, color-mix(in srgb, var(--zs-panel) 92%, rgba(255,255,255,0.12)) 0 58%, color-mix(in srgb, var(--zs-panel) 78%, rgba(255,255,255,0.08)) 70%, transparent 78%);
+      box-shadow:
+        0 12px 30px rgba(0, 0, 0, 0.18),
+        inset 0 0 24px rgba(255, 255, 255, 0.05);
+      z-index: 0;
+      pointer-events: none;
+    }
+
     .core-ring {
       position: absolute;
       inset: 0;
@@ -1018,17 +1061,19 @@ export class ZsPowerFlowCard extends LitElement {
       box-shadow:
         inset 0 0 46px rgba(255, 255, 255, 0.08),
         0 0 40px rgba(255, 255, 255, 0.06);
+      z-index: 1;
     }
 
     .core-ring.pulse {
       inset: -12px;
       opacity: 0.28;
       animation: pulse 4.8s ease-in-out infinite;
+      z-index: 0;
     }
 
     .core-content {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       text-align: center;
       padding: 22px;
     }

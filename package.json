@@ -1,6 +1,6 @@
 {
   "name": "zs-power-flow-card",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Modern configurable power flow card for Home Assistant Lovelace",
   "type": "module",
   "main": "src/main.ts",
@@ -15,7 +15,7 @@
     "battery"
   ],
   "author": "User + Codex",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "dependencies": {
     "lit": "^3.3.1"
   },

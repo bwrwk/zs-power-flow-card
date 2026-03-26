@@ -141,6 +141,8 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ${this.renderToggleTile('Belka statusu', 'show_status_bar', config.show_status_bar ?? true)}
             ${this.renderToggleTile('Odwroc znak sieci', 'invert_grid', config.invert_grid ?? false)}
             ${this.renderToggleTile('Odwroc znak baterii', 'invert_battery', config.invert_battery ?? false)}
+            ${this.renderToggleTile('Pokaz breakdown PV', 'show_pv_breakdown', config.show_pv_breakdown ?? true)}
+            ${this.renderToggleTile('Pokaz breakdown faz', 'show_phase_breakdown', config.show_phase_breakdown ?? true)}
           </div>
         </section>
 
@@ -167,6 +169,17 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ${this.renderEntityField('Fault urzadzenia', 'device_fault_entity', config.device_fault_entity ?? '', ['sensor'], 'Tekstowy fault inwertera, np. OK lub opis bledu.')}
             ${this.renderEntityField('Alarm baterii', 'battery_alarm_entity', config.battery_alarm_entity ?? '', ['binary_sensor', 'sensor'], 'Alarm baterii jako binary sensor lub tekstowy stan.')}
             ${this.renderEntityField('Fault baterii', 'battery_fault_entity', config.battery_fault_entity ?? '', ['binary_sensor', 'sensor'], 'Fault baterii jako binary sensor lub tekstowy stan.')}
+            ${this.renderEntityField('Tryb pracy falownika', 'work_mode_entity', config.work_mode_entity ?? '', ['sensor', 'select'], 'Biezacy work mode lub tekstowy status trybu pracy.')}
+            ${this.renderEntityField('Pattern energii', 'energy_pattern_entity', config.energy_pattern_entity ?? '', ['sensor', 'select'], 'Informacja o strategii pracy, np. Battery First, Load First.')}
+            ${this.renderEntityField('PV1 moc', 'pv1_power_entity', config.pv1_power_entity ?? '', ['sensor'], 'Opcjonalny breakdown pierwszego MPPT/stringu PV.')}
+            ${this.renderEntityField('PV2 moc', 'pv2_power_entity', config.pv2_power_entity ?? '', ['sensor'], 'Opcjonalny breakdown drugiego MPPT/stringu PV.')}
+            ${this.renderEntityField('PV3 moc', 'pv3_power_entity', config.pv3_power_entity ?? '', ['sensor'], 'Opcjonalny breakdown trzeciego MPPT/stringu PV.')}
+            ${this.renderEntityField('Load L1 moc', 'load_l1_power_entity', config.load_l1_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L1 dla obciazenia.')}
+            ${this.renderEntityField('Load L2 moc', 'load_l2_power_entity', config.load_l2_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L2 dla obciazenia.')}
+            ${this.renderEntityField('Load L3 moc', 'load_l3_power_entity', config.load_l3_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L3 dla obciazenia.')}
+            ${this.renderEntityField('Grid L1 moc', 'grid_l1_power_entity', config.grid_l1_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L1 po stronie sieci.')}
+            ${this.renderEntityField('Grid L2 moc', 'grid_l2_power_entity', config.grid_l2_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L2 po stronie sieci.')}
+            ${this.renderEntityField('Grid L3 moc', 'grid_l3_power_entity', config.grid_l3_power_entity ?? '', ['sensor'], 'Opcjonalna moc fazy L3 po stronie sieci.')}
           </div>
         </section>
 
@@ -537,6 +550,26 @@ function createNode(label, valueWatts, accent, secondary) {
         secondary,
     };
 }
+function createBreakdownItem(label, valueWatts) {
+    const display = withDisplayPower(valueWatts);
+    return {
+        label,
+        value: valueWatts,
+        displayValue: display.displayValue,
+        displayUnit: display.displayUnit,
+    };
+}
+function createOptionalBreakdown(hass, entries) {
+    return entries
+        .map(({ label, entityId }) => {
+        const entity = getEntity(hass, entityId);
+        const numeric = parseRawNumber(entity);
+        if (numeric === null || !entityId)
+            return null;
+        return createBreakdownItem(label, parsePowerWatts(entity));
+    })
+        .filter((item) => item !== null);
+}
 function getThemeTokens(theme) {
     return THEMES[theme ?? 'aurora'];
 }
@@ -593,6 +626,8 @@ function buildSnapshot(hass, config) {
         deviceFault: parseEntityText(getEntity(hass, config.device_fault_entity)),
         batteryAlarm: parseOptionalBoolean(getEntity(hass, config.battery_alarm_entity)),
         batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
+        workMode: parseEntityText(getEntity(hass, config.work_mode_entity)),
+        energyPattern: parseEntityText(getEntity(hass, config.energy_pattern_entity)),
         dailyEnergy: {
             solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
             home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
@@ -601,6 +636,21 @@ function buildSnapshot(hass, config) {
             batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
             batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
         },
+        pvBreakdown: createOptionalBreakdown(hass, [
+            { label: 'PV1', entityId: config.pv1_power_entity },
+            { label: 'PV2', entityId: config.pv2_power_entity },
+            { label: 'PV3', entityId: config.pv3_power_entity },
+        ]),
+        loadPhaseBreakdown: createOptionalBreakdown(hass, [
+            { label: 'L1 load', entityId: config.load_l1_power_entity },
+            { label: 'L2 load', entityId: config.load_l2_power_entity },
+            { label: 'L3 load', entityId: config.load_l3_power_entity },
+        ]),
+        gridPhaseBreakdown: createOptionalBreakdown(hass, [
+            { label: 'L1 grid', entityId: config.grid_l1_power_entity },
+            { label: 'L2 grid', entityId: config.grid_l2_power_entity },
+            { label: 'L3 grid', entityId: config.grid_l3_power_entity },
+        ]),
     };
 }
 function formatPower(valueWatts, decimals = 1) {
@@ -701,6 +751,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
 
           ${advanced ? this.renderAdvancedRail(snapshot) : A}
           ${advanced ? this.renderHealthRail(snapshot) : A}
+          ${advanced ? this.renderBreakdowns(snapshot) : A}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : A}
         </section>
       </ha-card>
@@ -857,8 +908,8 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       <section class="advanced-rail">
         <div class="rail-card">
           <span>Tryb pracy</span>
-          <strong>${this.describeSystemBalance(snapshot)}</strong>
-          <small>${snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+          <strong>${snapshot.workMode ?? this.describeSystemBalance(snapshot)}</strong>
+          <small>${snapshot.energyPattern ?? snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
         </div>
         <div class="rail-card">
           <span>Stan magazynu</span>
@@ -871,6 +922,36 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
         </div>
       </section>
+    `;
+    }
+    renderBreakdowns(snapshot) {
+        const showPv = (this._config.show_pv_breakdown ?? true) && snapshot.pvBreakdown.length > 0;
+        const showLoadPhases = (this._config.show_phase_breakdown ?? true) && snapshot.loadPhaseBreakdown.length > 0;
+        const showGridPhases = (this._config.show_phase_breakdown ?? true) && snapshot.gridPhaseBreakdown.length > 0;
+        if (!showPv && !showLoadPhases && !showGridPhases) {
+            return A;
+        }
+        return b `
+      <section class="breakdown-grid">
+        ${showPv ? this.renderBreakdownCard('MPPT / PV', snapshot.pvBreakdown) : A}
+        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciazenia', snapshot.loadPhaseBreakdown) : A}
+        ${showGridPhases ? this.renderBreakdownCard('Fazy sieci', snapshot.gridPhaseBreakdown) : A}
+      </section>
+    `;
+    }
+    renderBreakdownCard(title, items) {
+        return b `
+      <div class="breakdown-card">
+        <span class="breakdown-title">${title}</span>
+        <div class="breakdown-list">
+          ${items.map((item) => b `
+              <div class="breakdown-item">
+                <span>${item.label}</span>
+                <strong>${formatPower(item.value, this._config.decimals ?? 1)}</strong>
+              </div>
+            `)}
+        </div>
+      </div>
     `;
     }
     renderHealthRail(snapshot) {
@@ -1290,6 +1371,56 @@ ZsPowerFlowCard.styles = i$3 `
       margin-top: 16px;
     }
 
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .breakdown-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .breakdown-title {
+      display: block;
+      color: var(--zs-muted);
+      margin-bottom: 10px;
+      font-size: 0.84rem;
+    }
+
+    .breakdown-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .breakdown-item:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .breakdown-item span {
+      color: var(--zs-muted);
+    }
+
+    .breakdown-item strong {
+      font-size: 0.98rem;
+    }
+
     .advanced-rail {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1446,6 +1577,10 @@ ZsPowerFlowCard.styles = i$3 `
       .health-rail {
         grid-template-columns: 1fr;
       }
+
+      .breakdown-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -1515,6 +1650,10 @@ ZsPowerFlowCard.styles = i$3 `
 
       .health-rail {
         grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .breakdown-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 

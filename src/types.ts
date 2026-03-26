@@ -31,6 +31,17 @@ export interface ZsPowerFlowCardConfig {
   device_fault_entity?: string;
   battery_alarm_entity?: string;
   battery_fault_entity?: string;
+  work_mode_entity?: string;
+  energy_pattern_entity?: string;
+  pv1_power_entity?: string;
+  pv2_power_entity?: string;
+  pv3_power_entity?: string;
+  load_l1_power_entity?: string;
+  load_l2_power_entity?: string;
+  load_l3_power_entity?: string;
+  grid_l1_power_entity?: string;
+  grid_l2_power_entity?: string;
+  grid_l3_power_entity?: string;
   battery_capacity_kwh?: number;
   theme?: FlowTheme;
   layout?: FlowLayout;
@@ -42,6 +53,8 @@ export interface ZsPowerFlowCardConfig {
   show_battery?: boolean;
   animation_enabled?: boolean;
   show_status_bar?: boolean;
+  show_phase_breakdown?: boolean;
+  show_pv_breakdown?: boolean;
   invert_grid?: boolean;
   invert_battery?: boolean;
   decimals?: number;
@@ -58,6 +71,13 @@ export interface FlowNodeData {
   displayUnit: 'W' | 'kW';
   accent: string;
   secondary: string;
+}
+
+export interface BreakdownItem {
+  label: string;
+  value: number;
+  displayValue: number;
+  displayUnit: 'W' | 'kW';
 }
 
 export interface PowerFlowSnapshot {
@@ -82,6 +102,8 @@ export interface PowerFlowSnapshot {
   deviceFault: string | null;
   batteryAlarm: boolean | null;
   batteryFault: boolean | null;
+  workMode: string | null;
+  energyPattern: string | null;
   dailyEnergy: {
     solar: number | null;
     home: number | null;
@@ -90,4 +112,7 @@ export interface PowerFlowSnapshot {
     batteryCharge: number | null;
     batteryDischarge: number | null;
   };
+  pvBreakdown: BreakdownItem[];
+  loadPhaseBreakdown: BreakdownItem[];
+  gridPhaseBreakdown: BreakdownItem[];
 }

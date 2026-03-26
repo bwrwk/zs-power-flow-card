@@ -1,4 +1,4 @@
-import { FlowTheme, FlowNodeData, HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
+import { BreakdownItem, FlowTheme, FlowNodeData, HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
 
 const THEMES: Record<FlowTheme, { panel: string; border: string; text: string; muted: string; solar: string; grid: string; battery: string; home: string }> = {
   aurora: {
@@ -125,6 +125,30 @@ function createNode(label: string, valueWatts: number, accent: string, secondary
   };
 }
 
+function createBreakdownItem(label: string, valueWatts: number): BreakdownItem {
+  const display = withDisplayPower(valueWatts);
+  return {
+    label,
+    value: valueWatts,
+    displayValue: display.displayValue,
+    displayUnit: display.displayUnit,
+  };
+}
+
+function createOptionalBreakdown(
+  hass: HomeAssistantLike | undefined,
+  entries: Array<{ label: string; entityId?: string }>,
+): BreakdownItem[] {
+  return entries
+    .map(({ label, entityId }) => {
+      const entity = getEntity(hass, entityId);
+      const numeric = parseRawNumber(entity);
+      if (numeric === null || !entityId) return null;
+      return createBreakdownItem(label, parsePowerWatts(entity));
+    })
+    .filter((item): item is BreakdownItem => item !== null);
+}
+
 export function getThemeTokens(theme: FlowTheme | undefined) {
   return THEMES[theme ?? 'aurora'];
 }
@@ -188,6 +212,8 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
     deviceFault: parseEntityText(getEntity(hass, config.device_fault_entity)),
     batteryAlarm: parseOptionalBoolean(getEntity(hass, config.battery_alarm_entity)),
     batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
+    workMode: parseEntityText(getEntity(hass, config.work_mode_entity)),
+    energyPattern: parseEntityText(getEntity(hass, config.energy_pattern_entity)),
     dailyEnergy: {
       solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
       home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
@@ -196,6 +222,21 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
       batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
       batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
     },
+    pvBreakdown: createOptionalBreakdown(hass, [
+      { label: 'PV1', entityId: config.pv1_power_entity },
+      { label: 'PV2', entityId: config.pv2_power_entity },
+      { label: 'PV3', entityId: config.pv3_power_entity },
+    ]),
+    loadPhaseBreakdown: createOptionalBreakdown(hass, [
+      { label: 'L1 load', entityId: config.load_l1_power_entity },
+      { label: 'L2 load', entityId: config.load_l2_power_entity },
+      { label: 'L3 load', entityId: config.load_l3_power_entity },
+    ]),
+    gridPhaseBreakdown: createOptionalBreakdown(hass, [
+      { label: 'L1 grid', entityId: config.grid_l1_power_entity },
+      { label: 'L2 grid', entityId: config.grid_l2_power_entity },
+      { label: 'L3 grid', entityId: config.grid_l3_power_entity },
+    ]),
   };
 }
 

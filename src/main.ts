@@ -98,6 +98,7 @@ export class ZsPowerFlowCard extends LitElement {
 
           ${advanced ? this.renderAdvancedRail(snapshot) : nothing}
           ${advanced ? this.renderHealthRail(snapshot) : nothing}
+          ${advanced ? this.renderBreakdowns(snapshot) : nothing}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : nothing}
         </section>
       </ha-card>
@@ -270,8 +271,8 @@ export class ZsPowerFlowCard extends LitElement {
       <section class="advanced-rail">
         <div class="rail-card">
           <span>Tryb pracy</span>
-          <strong>${this.describeSystemBalance(snapshot)}</strong>
-          <small>${snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+          <strong>${snapshot.workMode ?? this.describeSystemBalance(snapshot)}</strong>
+          <small>${snapshot.energyPattern ?? snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
         </div>
         <div class="rail-card">
           <span>Stan magazynu</span>
@@ -284,6 +285,42 @@ export class ZsPowerFlowCard extends LitElement {
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
         </div>
       </section>
+    `;
+  }
+
+  private renderBreakdowns(snapshot: PowerFlowSnapshot) {
+    const showPv = (this._config.show_pv_breakdown ?? true) && snapshot.pvBreakdown.length > 0;
+    const showLoadPhases = (this._config.show_phase_breakdown ?? true) && snapshot.loadPhaseBreakdown.length > 0;
+    const showGridPhases = (this._config.show_phase_breakdown ?? true) && snapshot.gridPhaseBreakdown.length > 0;
+
+    if (!showPv && !showLoadPhases && !showGridPhases) {
+      return nothing;
+    }
+
+    return html`
+      <section class="breakdown-grid">
+        ${showPv ? this.renderBreakdownCard('MPPT / PV', snapshot.pvBreakdown) : nothing}
+        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciazenia', snapshot.loadPhaseBreakdown) : nothing}
+        ${showGridPhases ? this.renderBreakdownCard('Fazy sieci', snapshot.gridPhaseBreakdown) : nothing}
+      </section>
+    `;
+  }
+
+  private renderBreakdownCard(title: string, items: Array<{ label: string; value: number }>) {
+    return html`
+      <div class="breakdown-card">
+        <span class="breakdown-title">${title}</span>
+        <div class="breakdown-list">
+          ${items.map(
+            (item) => html`
+              <div class="breakdown-item">
+                <span>${item.label}</span>
+                <strong>${formatPower(item.value, this._config.decimals ?? 1)}</strong>
+              </div>
+            `,
+          )}
+        </div>
+      </div>
     `;
   }
 
@@ -700,6 +737,56 @@ export class ZsPowerFlowCard extends LitElement {
       margin-top: 16px;
     }
 
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .breakdown-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .breakdown-title {
+      display: block;
+      color: var(--zs-muted);
+      margin-bottom: 10px;
+      font-size: 0.84rem;
+    }
+
+    .breakdown-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .breakdown-item:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .breakdown-item span {
+      color: var(--zs-muted);
+    }
+
+    .breakdown-item strong {
+      font-size: 0.98rem;
+    }
+
     .advanced-rail {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -856,6 +943,10 @@ export class ZsPowerFlowCard extends LitElement {
       .health-rail {
         grid-template-columns: 1fr;
       }
+
+      .breakdown-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -925,6 +1016,10 @@ export class ZsPowerFlowCard extends LitElement {
 
       .health-rail {
         grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .breakdown-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 

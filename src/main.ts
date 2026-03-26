@@ -232,7 +232,7 @@ export class ZsPowerFlowCard extends LitElement {
     const animate = this._config.animation_enabled ?? true;
     const glow = Math.max(0.16, Math.min(0.42, Math.abs(power) / 3000));
     const style = this._config.flow_style ?? 'soft';
-    const flowDirection = direction === 'reverse' ? 1 : -1;
+    const directionClass = direction === 'reverse' ? 'reverse' : 'forward';
 
     return html`
       <svg class="flow" viewBox="0 0 640 420" preserveAspectRatio="none" aria-hidden="true">
@@ -243,8 +243,8 @@ export class ZsPowerFlowCard extends LitElement {
           d=${path}
         ></path>
         <path
-          class=${`flow-line ${style} ${active ? 'visible' : ''} ${active && animate ? 'active' : ''}`}
-          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.6, 7.6 - Math.min(Math.abs(power) / 700, 4.2))}s; --flow-direction:${flowDirection};`}
+          class=${`flow-line ${style} ${directionClass} ${active ? 'visible' : ''} ${active && animate ? 'active' : ''}`}
+          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.6, 7.6 - Math.min(Math.abs(power) / 700, 4.2))}s;`}
           d=${path}
         ></path>
       </svg>
@@ -828,10 +828,18 @@ export class ZsPowerFlowCard extends LitElement {
       animation: flow var(--flow-speed) linear infinite;
     }
 
+    .flow-line.reverse.active {
+      animation-direction: reverse;
+    }
+
     .flow-line.pulse.active {
       animation:
         flow var(--flow-speed) linear infinite,
         flowPulse 2.8s ease-in-out infinite;
+    }
+
+    .flow-line.pulse.reverse.active {
+      animation-direction: reverse, normal;
     }
 
     .details {
@@ -1004,7 +1012,7 @@ export class ZsPowerFlowCard extends LitElement {
         stroke-dashoffset: 0;
       }
       to {
-        stroke-dashoffset: calc(-168 * var(--flow-direction));
+        stroke-dashoffset: -168;
       }
     }
 

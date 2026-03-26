@@ -154,6 +154,11 @@ function createOptionalBreakdown(
     .filter((item): item is BreakdownItem => item !== null);
 }
 
+function ratioOrNull(numerator: number | null, denominator: number | null): number | null {
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return clamp((numerator / denominator) * 100, 0, 100);
+}
+
 export function getThemeTokens(theme: FlowTheme | undefined) {
   return THEMES[theme ?? 'aurora'];
 }
@@ -228,10 +233,35 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
         : 'unassigned_demand';
   const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
   const netHomeDemand = Math.max(0, home - solarToHome);
+  const currentSourceTotal = solarToHome + gridToHome + batteryToHome;
+  const dailySolarSelfUsed =
+    parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) !== null &&
+    parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) !== null
+      ? Math.max(
+          0,
+          (parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) ?? 0) -
+            (parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) ?? 0),
+        )
+      : null;
+  const dailyHomeValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity));
+  const dailyImportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity));
+  const dailySolarValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity));
+  const batteryRuntimeHours =
+    batteryStoredKwh !== null && home > 0 ? batteryStoredKwh / (home / 1000) : null;
+  const residualRate = home > 0 ? clamp((residualPower / home) * 100, 0, 100) : null;
 
   const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
   const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
   const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
+
+  const dailyEnergy = {
+    solar: dailySolarValue,
+    home: dailyHomeValue,
+    gridImport: dailyImportValue,
+    gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+    batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
+    batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
+  };
 
   return {
     solar: createNode(config.solar_label ?? 'Produkcja', solar, solar, themeTokens.solar, 'PV'),
@@ -265,14 +295,21 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
     batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
     workMode: parseEntityText(getEntity(hass, config.work_mode_entity)),
     energyPattern: parseEntityText(getEntity(hass, config.energy_pattern_entity)),
-    dailyEnergy: {
-      solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
-      home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
-      gridImport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity)),
-      gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
-      batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
-      batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
+    analytics: {
+      currentSourceMix: {
+        solar: currentSourceTotal > 0 ? (solarToHome / currentSourceTotal) * 100 : 0,
+        grid: currentSourceTotal > 0 ? (gridToHome / currentSourceTotal) * 100 : 0,
+        battery: currentSourceTotal > 0 ? (batteryToHome / currentSourceTotal) * 100 : 0,
+      },
+      selfConsumptionRate: ratioOrNull(dailySolarSelfUsed, dailySolarValue),
+      selfSufficiencyRate:
+        dailyHomeValue !== null && dailyImportValue !== null
+          ? ratioOrNull(Math.max(0, dailyHomeValue - dailyImportValue), dailyHomeValue)
+          : null,
+      batteryRuntimeHours,
+      residualRate,
     },
+    dailyEnergy,
     pvBreakdown: createOptionalBreakdown(hass, [
       { label: 'PV1', entityId: config.pv1_power_entity },
       { label: 'PV2', entityId: config.pv2_power_entity },

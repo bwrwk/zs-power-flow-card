@@ -31,6 +31,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
 
     return html`
       <div class="form">
+        ${this.renderWizardSection(config)}
         ${this.renderRecommendationSection(config)}
         ${this.renderValidationSection(config)}
 
@@ -171,6 +172,37 @@ export class ZsPowerFlowCardEditor extends LitElement {
           </div>
         </section>
       </div>
+    `;
+  }
+
+  private renderWizardSection(config: ZsPowerFlowCardConfig) {
+    const profile = this.detectProfile();
+    const profileLabel =
+      profile === 'solarman' ? 'Solarman-like' : profile === 'deye_sunsynk' ? 'Deye / Sunsynk-like' : 'Generic';
+
+    return html`
+      <section class="section accent">
+        <div class="section-header">
+          <h4>Szybki start</h4>
+          <p>Wykryty profil: <strong>${profileLabel}</strong>. Mozesz uzupelnic konfiguracje jednym kliknieciem i potem tylko ja skorygowac.</p>
+        </div>
+
+        <div class="wizard-actions">
+          <button type="button" class="wizard-button" @click=${() => this.applySuggestedConfig(this.buildWizardConfig('core'))}>
+            Ustaw podstawowe encje
+          </button>
+          <button type="button" class="wizard-button" @click=${() => this.applySuggestedConfig(this.buildWizardConfig('advanced'))}>
+            Ustaw advanced
+          </button>
+          <button
+            type="button"
+            class="wizard-button secondary"
+            @click=${() => this.applySuggestedConfig(this.buildWizardConfig(profile === 'generic' ? 'advanced' : 'profile'))}
+          >
+            Zastosuj preset ${profileLabel}
+          </button>
+        </div>
+      </section>
     `;
   }
 
@@ -408,6 +440,108 @@ export class ZsPowerFlowCardEditor extends LitElement {
     ].filter((item): item is { label: string; key: keyof ZsPowerFlowCardConfig; value: string; reason: string } => Boolean(item));
   }
 
+  private buildWizardConfig(mode: 'core' | 'advanced' | 'profile'): Partial<ZsPowerFlowCardConfig> {
+    const profile = this.detectProfile();
+    const core: Partial<ZsPowerFlowCardConfig> = {
+      solar_entity: this.findBestEntity(['pv power', 'pv_power', 'solar power', 'production'], ['sensor'])?.entityId,
+      grid_entity: this.findBestEntity(['grid power', 'grid_power', 'external power', 'import power'], ['sensor'])?.entityId,
+      battery_power_entity: this.findBestEntity(['battery power', 'battery_power'], ['sensor'])?.entityId,
+      battery_soc_entity: this.findBestEntity(['battery soc', ' battery ', 'battery'], ['sensor'])?.entityId,
+      home_entity: this.findBestEntity(['load power', 'load_power', 'home load', 'consumption'], ['sensor'])?.entityId,
+      grid_connected_entity: this.findBestEntity(['grid connected', ' grid '], ['binary_sensor', 'sensor'])?.entityId,
+      inverter_status_entity: this.findBestEntity(['device state', 'inverter status', 'status'], ['sensor'])?.entityId,
+      power_noise_floor_w: this._config?.power_noise_floor_w ?? 30,
+    };
+
+    if (mode === 'core') {
+      return core;
+    }
+
+    const advanced: Partial<ZsPowerFlowCardConfig> = {
+      ...core,
+      daily_solar_energy_entity: this.findBestEntity(['today production', 'daily solar', 'today_production'], ['sensor'])?.entityId,
+      daily_home_energy_entity: this.findBestEntity(['today load consumption', 'daily home', 'load consumption'], ['sensor'])?.entityId,
+      daily_grid_import_energy_entity: this.findBestEntity(['today energy import', 'daily import', 'energy import'], ['sensor'])?.entityId,
+      daily_grid_export_energy_entity: this.findBestEntity(['today energy export', 'daily export', 'energy export'], ['sensor'])?.entityId,
+      daily_battery_charge_energy_entity: this.findBestEntity(['today battery charge', 'battery charge'], ['sensor'])?.entityId,
+      daily_battery_discharge_energy_entity: this.findBestEntity(['today battery discharge', 'battery discharge'], ['sensor'])?.entityId,
+      battery_state_entity: this.findBestEntity(['battery state'], ['sensor'])?.entityId,
+      battery_soh_entity: this.findBestEntity(['battery soh'], ['sensor'])?.entityId,
+      battery_temperature_entity: this.findBestEntity(['battery temperature'], ['sensor'])?.entityId,
+      inverter_temperature_entity: this.findBestEntity(['inverter temperature', 'device temperature', 'temperature'], ['sensor'])?.entityId,
+      device_alarm_entity: this.findBestEntity(['device alarm', 'alarm'], ['sensor'])?.entityId,
+      device_fault_entity: this.findBestEntity(['device fault', 'fault'], ['sensor'])?.entityId,
+      battery_alarm_entity: this.findBestEntity(['battery alarm'], ['binary_sensor', 'sensor'])?.entityId,
+      battery_fault_entity: this.findBestEntity(['battery fault'], ['binary_sensor', 'sensor'])?.entityId,
+      work_mode_entity: this.findBestEntity(['work mode'], ['sensor', 'select'])?.entityId,
+      energy_pattern_entity: this.findBestEntity(['energy pattern'], ['sensor', 'select'])?.entityId,
+      pv1_power_entity: this.findBestEntity(['pv1 power', 'pv1_power'], ['sensor'])?.entityId,
+      pv2_power_entity: this.findBestEntity(['pv2 power', 'pv2_power'], ['sensor'])?.entityId,
+      pv3_power_entity: this.findBestEntity(['pv3 power', 'pv3_power'], ['sensor'])?.entityId,
+      load_l1_power_entity: this.findBestEntity(['load l1 power', 'load_l1_power'], ['sensor'])?.entityId,
+      load_l2_power_entity: this.findBestEntity(['load l2 power', 'load_l2_power'], ['sensor'])?.entityId,
+      load_l3_power_entity: this.findBestEntity(['load l3 power', 'load_l3_power'], ['sensor'])?.entityId,
+      grid_l1_power_entity: this.findBestEntity(['grid l1 power', 'grid_l1_power'], ['sensor'])?.entityId,
+      grid_l2_power_entity: this.findBestEntity(['grid l2 power', 'grid_l2_power'], ['sensor'])?.entityId,
+      grid_l3_power_entity: this.findBestEntity(['grid l3 power', 'grid_l3_power'], ['sensor'])?.entityId,
+      view_mode: 'advanced',
+      visual_preset: profile === 'generic' ? 'default' : 'analytics',
+    };
+
+    if (mode === 'advanced') {
+      return advanced;
+    }
+
+    if (profile === 'solarman') {
+      return {
+        ...advanced,
+        theme: this._config?.theme ?? 'sunset',
+        layout: this._config?.layout ?? 'balanced',
+        show_pv_breakdown: true,
+        show_phase_breakdown: true,
+      };
+    }
+
+    if (profile === 'deye_sunsynk') {
+      return {
+        ...advanced,
+        theme: this._config?.theme ?? 'aurora',
+        visual_preset: 'analytics',
+        show_pv_breakdown: true,
+        show_phase_breakdown: true,
+      };
+    }
+
+    return advanced;
+  }
+
+  private detectProfile(): 'generic' | 'solarman' | 'deye_sunsynk' {
+    const entityIds = Object.keys(this.hass?.states ?? {}).join(' ').toLowerCase();
+    if (entityIds.includes('solarman')) return 'solarman';
+    if (entityIds.includes('deye') || entityIds.includes('sunsynk')) return 'deye_sunsynk';
+    return 'generic';
+  }
+
+  private applySuggestedConfig(patch: Partial<ZsPowerFlowCardConfig>) {
+    const sanitized = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined && value !== ''),
+    ) as Partial<ZsPowerFlowCardConfig>;
+
+    const nextConfig: ZsPowerFlowCardConfig = {
+      ...this._config,
+      ...sanitized,
+    } as ZsPowerFlowCardConfig;
+
+    this._config = nextConfig;
+    this.dispatchEvent(
+      new CustomEvent('config-changed', {
+        detail: { config: nextConfig },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private makeRecommendation(
     label: string,
     key: keyof ZsPowerFlowCardConfig,
@@ -556,6 +690,33 @@ export class ZsPowerFlowCardEditor extends LitElement {
     .validation-list {
       display: grid;
       gap: 10px;
+    }
+
+    .wizard-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .wizard-button {
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(239,246,255,0.94));
+      color: var(--primary-text-color);
+      border-radius: 14px;
+      padding: 11px 14px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .wizard-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(59, 130, 246, 0.32);
+      box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+    }
+
+    .wizard-button.secondary {
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(249,250,251,0.94));
     }
 
     .recommendation {

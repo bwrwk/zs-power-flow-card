@@ -6,22 +6,18 @@ To jest autorska implementacja inspirowana ogolnym pomyslem kart typu power flow
 
 ## Status
 
-Wersja `0.1.0` to MVP z:
+Wersja `0.3.0` to juz uzywalna baza pod publiczna karte:
 
-- czystym szkieletem projektu w TypeScript i Lit,
-- nowoczesnym ukladem `solar / grid / battery / home`,
-- animowanymi liniami przeplywu energii,
-- prostym API konfiguracyjnym opartym o encje Home Assistanta,
-- prostym editorem Lovelace do podpiania encji i wyboru motywu,
-- fallbackiem demo, gdy encje nie sa jeszcze podpiete.
-
-Nowsze iteracje dodaja tez:
-
+- nowoczesny uklad `solar / grid / battery / home`,
+- animowane flow z poprawiona geometria i stabilnym resize,
 - bardziej wiarygodny bilans energii z rozbiciem `grid -> home`, `grid -> battery`, `battery -> home`, `battery -> grid`,
 - prog szumu mocy, zeby drobne wahania nie udawaly realnego przeplywu,
-- statusy health i alarmow,
+- wizard i auto-discovery encji w editorze,
+- profile `generic`, `solarman-like`, `deye / sunsynk-like`,
+- analytics: autokonsumpcja, samowystarczalnosc, runtime baterii i mix zasilania domu,
 - breakdown MPPT i faz,
-- akcje `tap` i `hold` dla glownych node'ow,
+- statusy health i alarmow,
+- akcje `tap` i `hold`,
 - harness do lokalnych testow wizualnych.
 
 ## Instalacja developerska
@@ -64,10 +60,54 @@ hold_action:
   navigation_path: /lovelace/energia
 ```
 
+## Wizard i auto-discovery
+
+Editor Lovelace ma teraz sekcje:
+
+- `Szybki start` - automatycznie proponuje konfiguracje podstawowa, advanced albo preset profilu,
+- `Rekomendowane mapowanie` - podpowiada najbardziej prawdopodobne encje,
+- `Kontrola konfiguracji` - pokazuje braki i duplikaty.
+
+Wykrywanie profilu opiera sie na nazwach encji i jest celowo bezpieczne:
+
+- `generic`
+- `solarman-like`
+- `deye / sunsynk-like`
+
+To nie blokuje recznej konfiguracji. Wszystkie pola nadal mozna poprawic lub nadpisac samodzielnie.
+
+## Testy i walidacja
+
+Logika ma testy jednostkowe:
+
+```bash
+npm test
+```
+
+Do sprawdzania geometrii, resize i layoutow full-width sluzy harness wizualny:
+
+```bash
+npm run build
+npm run visual:serve
+```
+
+Potem otworz:
+
+```text
+http://localhost:4173/visual/index.html
+```
+
+## Uwagi integracyjne
+
+- karta wspiera instalacje 1-fazowe i 3-fazowe,
+- breakdowny PV i faz sa opcjonalne,
+- jesli falownik raportuje inne znaki dla sieci lub baterii, uzyj `invert_grid` i `invert_battery`,
+- jesli bateria pokazuje pojedyncze waty szumu, ustaw lub zostaw `power_noise_floor_w`.
+
 ## Kierunek rozwoju
 
-- rozbudowany editor GUI,
-- wiecej layoutow i presetow wizualnych,
-- grupy encji dla wielofazowych i bardziej zlozonych instalacji,
-- lepsze mapowanie ikon i stanów pracy magazynu,
-- testy logiki przeplywow i formatterow.
+- dalsze profile auto-mapowania,
+- jeszcze lepszy wizard i onboarding,
+- testy screenshotowe w przegladarce,
+- dodatkowe warianty analytics i layoutow,
+- stabilizacja API configu pod `v1.0`.

@@ -158,6 +158,7 @@ export class ZsPowerFlowCard extends LitElement {
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : nothing}
+          ${advanced ? this.renderAnalyticsRail(snapshot) : nothing}
           ${advanced ? this.renderHealthRail(snapshot) : nothing}
           ${advanced ? this.renderBreakdowns(snapshot) : nothing}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : nothing}
@@ -516,6 +517,46 @@ export class ZsPowerFlowCard extends LitElement {
     `;
   }
 
+  private renderAnalyticsRail(snapshot: PowerFlowSnapshot) {
+    return html`
+      <section class="analytics-rail">
+        <div class="analytics-card kpi">
+          <span>Autokonsumpcja dzisiaj</span>
+          <strong>${this.formatPercent(snapshot.analytics.selfConsumptionRate)}</strong>
+          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udzial energii PV zuzytej lokalnie'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Samowystarczalnosc dzisiaj</span>
+          <strong>${this.formatPercent(snapshot.analytics.selfSufficiencyRate)}</strong>
+          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udzial zuzycia pokrytego bez importu'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Bufor baterii</span>
+          <strong>${this.formatHours(snapshot.analytics.batteryRuntimeHours)}</strong>
+          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemnosci lub SOC' : 'Szacowany czas pokrycia aktualnego obciazenia'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Reszta bilansu</span>
+          <strong>${this.formatPercent(snapshot.analytics.residualRate)}</strong>
+          <small>${this.describeResidualLabel(snapshot)}</small>
+        </div>
+        <div class="analytics-card mix">
+          <span>Aktualny mix zasilania domu</span>
+          <div class="mix-bar" aria-hidden="true">
+            <div class="mix-segment solar" style=${`width:${snapshot.analytics.currentSourceMix.solar.toFixed(1)}%`}></div>
+            <div class="mix-segment battery" style=${`width:${snapshot.analytics.currentSourceMix.battery.toFixed(1)}%`}></div>
+            <div class="mix-segment grid" style=${`width:${snapshot.analytics.currentSourceMix.grid.toFixed(1)}%`}></div>
+          </div>
+          <div class="mix-legend">
+            <span>PV ${this.formatPercent(snapshot.analytics.currentSourceMix.solar, 0)}</span>
+            <span>Bat ${this.formatPercent(snapshot.analytics.currentSourceMix.battery, 0)}</span>
+            <span>Grid ${this.formatPercent(snapshot.analytics.currentSourceMix.grid, 0)}</span>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   private renderBreakdowns(snapshot: PowerFlowSnapshot) {
     const showPv = (this._config.show_pv_breakdown ?? true) && snapshot.pvBreakdown.length > 0;
     const showLoadPhases = (this._config.show_phase_breakdown ?? true) && snapshot.loadPhaseBreakdown.length > 0;
@@ -619,6 +660,17 @@ export class ZsPowerFlowCard extends LitElement {
       return 'Brakujace zrodlo / dane';
     }
     return 'Bilans pozostaly';
+  }
+
+  private formatPercent(value: number | null, decimals = 1): string {
+    if (value === null) return '--';
+    return `${value.toFixed(decimals)}%`;
+  }
+
+  private formatHours(value: number | null): string {
+    if (value === null) return '--';
+    if (value >= 10) return `${value.toFixed(0)} h`;
+    return `${value.toFixed(1)} h`;
   }
 
   private handleTap(entityId?: string) {
@@ -899,7 +951,7 @@ export class ZsPowerFlowCard extends LitElement {
       height: 168px;
       display: grid;
       place-items: center;
-      z-index: 2;
+      z-index: 4;
     }
 
     .flow-anchor {
@@ -1249,6 +1301,13 @@ export class ZsPowerFlowCard extends LitElement {
       margin-top: 12px;
     }
 
+    .analytics-rail {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
     .rail-card {
       padding: 14px 16px;
       border-radius: 18px;
@@ -1265,6 +1324,65 @@ export class ZsPowerFlowCard extends LitElement {
         linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
         rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .analytics-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .analytics-card span,
+    .analytics-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .analytics-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.05rem;
+    }
+
+    .analytics-card.mix {
+      grid-column: span 2;
+    }
+
+    .mix-bar {
+      margin-top: 10px;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      display: flex;
+    }
+
+    .mix-segment {
+      height: 100%;
+    }
+
+    .mix-segment.solar {
+      background: var(--zs-solar);
+    }
+
+    .mix-segment.battery {
+      background: var(--zs-battery);
+    }
+
+    .mix-segment.grid {
+      background: var(--zs-grid);
+    }
+
+    .mix-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--zs-muted);
+      font-size: 0.82rem;
     }
 
     .health-card.warn {
@@ -1411,6 +1529,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .advanced-rail,
+      .analytics-rail,
       .health-rail,
       .breakdown-grid {
         grid-template-columns: 1fr;
@@ -1491,6 +1610,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .advanced-rail,
+      .analytics-rail,
       .health-rail,
       .breakdown-grid {
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

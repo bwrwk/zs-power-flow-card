@@ -69,6 +69,8 @@ describe('buildSnapshot', () => {
     expect(snapshot.gridConnected).toBe(true);
     expect(snapshot.inverterStatus).toBe('Normal');
     expect(snapshot.dailyEnergy.solar).toBeCloseTo(21.3);
+    expect(snapshot.analytics.selfConsumptionRate).toBeCloseTo(72.8, 1);
+    expect(snapshot.analytics.selfSufficiencyRate).toBeCloseTo(86.6, 1);
     expect(snapshot.solar.displayUnit).toBe('kW');
     expect(snapshot.batteryState).toBe('idle');
     expect(snapshot.batterySoh).toBeCloseTo(99.8);
@@ -96,6 +98,9 @@ describe('buildSnapshot', () => {
     expect(snapshot.netHomeDemand).toBeCloseTo(3800);
     expect(snapshot.residualPower).toBeCloseTo(400);
     expect(snapshot.residualDirection).toBe('unassigned_source');
+    expect(snapshot.analytics.currentSourceMix.solar).toBeCloseTo(22.4, 1);
+    expect(snapshot.analytics.currentSourceMix.battery).toBeCloseTo(34.7, 1);
+    expect(snapshot.analytics.currentSourceMix.grid).toBeCloseTo(42.9, 1);
   });
 
   it('falls back to demo values when entities are missing', () => {
@@ -168,6 +173,25 @@ describe('buildSnapshot', () => {
     expect(snapshot.gridToHome).toBeCloseTo(639);
     expect(snapshot.residualPower).toBeCloseTo(134);
     expect(snapshot.residualDirection).toBe('unassigned_source');
+  });
+
+  it('estimates battery runtime when battery storage and load are known', () => {
+    const snapshot = buildSnapshot(
+      {
+        states: {
+          'sensor.solar': { state: '0', attributes: { unit_of_measurement: 'W' } },
+          'sensor.grid': { state: '500', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_power': { state: '0', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_soc': { state: '50' },
+          'sensor.home': { state: '2000', attributes: { unit_of_measurement: 'W' } },
+        },
+      },
+      baseConfig,
+    );
+
+    expect(snapshot.batteryStoredKwh).toBeCloseTo(7.5);
+    expect(snapshot.analytics.batteryRuntimeHours).toBeCloseTo(3.75);
+    expect(snapshot.analytics.residualRate).toBeCloseTo(75);
   });
 });
 

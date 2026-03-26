@@ -95,6 +95,18 @@ export interface BreakdownItem {
   displayUnit: 'W' | 'kW';
 }
 
+export interface PowerFlowAnalytics {
+  currentSourceMix: {
+    solar: number;
+    grid: number;
+    battery: number;
+  };
+  selfConsumptionRate: number | null;
+  selfSufficiencyRate: number | null;
+  batteryRuntimeHours: number | null;
+  residualRate: number | null;
+}
+
 export interface PowerFlowSnapshot {
   solar: FlowNodeData;
   grid: FlowNodeData;
@@ -123,6 +135,7 @@ export interface PowerFlowSnapshot {
   batteryFault: boolean | null;
   workMode: string | null;
   energyPattern: string | null;
+  analytics: PowerFlowAnalytics;
   dailyEnergy: {
     solar: number | null;
     home: number | null;

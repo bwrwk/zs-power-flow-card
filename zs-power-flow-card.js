@@ -96,6 +96,7 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
         }
         return b `
       <div class="form">
+        ${this.renderWizardSection(config)}
         ${this.renderRecommendationSection(config)}
         ${this.renderValidationSection(config)}
 
@@ -236,6 +237,34 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           </div>
         </section>
       </div>
+    `;
+    }
+    renderWizardSection(config) {
+        const profile = this.detectProfile();
+        const profileLabel = profile === 'solarman' ? 'Solarman-like' : profile === 'deye_sunsynk' ? 'Deye / Sunsynk-like' : 'Generic';
+        return b `
+      <section class="section accent">
+        <div class="section-header">
+          <h4>Szybki start</h4>
+          <p>Wykryty profil: <strong>${profileLabel}</strong>. Mozesz uzupelnic konfiguracje jednym kliknieciem i potem tylko ja skorygowac.</p>
+        </div>
+
+        <div class="wizard-actions">
+          <button type="button" class="wizard-button" @click=${() => this.applySuggestedConfig(this.buildWizardConfig('core'))}>
+            Ustaw podstawowe encje
+          </button>
+          <button type="button" class="wizard-button" @click=${() => this.applySuggestedConfig(this.buildWizardConfig('advanced'))}>
+            Ustaw advanced
+          </button>
+          <button
+            type="button"
+            class="wizard-button secondary"
+            @click=${() => this.applySuggestedConfig(this.buildWizardConfig(profile === 'generic' ? 'advanced' : 'profile'))}
+          >
+            Zastosuj preset ${profileLabel}
+          </button>
+        </div>
+      </section>
     `;
     }
     renderRecommendationSection(config) {
@@ -435,6 +464,95 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             this.makeRecommendation('Status inwertera', 'inverter_status_entity', ['device state', 'inverter status', 'status']),
         ].filter((item) => Boolean(item));
     }
+    buildWizardConfig(mode) {
+        const profile = this.detectProfile();
+        const core = {
+            solar_entity: this.findBestEntity(['pv power', 'pv_power', 'solar power', 'production'], ['sensor'])?.entityId,
+            grid_entity: this.findBestEntity(['grid power', 'grid_power', 'external power', 'import power'], ['sensor'])?.entityId,
+            battery_power_entity: this.findBestEntity(['battery power', 'battery_power'], ['sensor'])?.entityId,
+            battery_soc_entity: this.findBestEntity(['battery soc', ' battery ', 'battery'], ['sensor'])?.entityId,
+            home_entity: this.findBestEntity(['load power', 'load_power', 'home load', 'consumption'], ['sensor'])?.entityId,
+            grid_connected_entity: this.findBestEntity(['grid connected', ' grid '], ['binary_sensor', 'sensor'])?.entityId,
+            inverter_status_entity: this.findBestEntity(['device state', 'inverter status', 'status'], ['sensor'])?.entityId,
+            power_noise_floor_w: this._config?.power_noise_floor_w ?? 30,
+        };
+        if (mode === 'core') {
+            return core;
+        }
+        const advanced = {
+            ...core,
+            daily_solar_energy_entity: this.findBestEntity(['today production', 'daily solar', 'today_production'], ['sensor'])?.entityId,
+            daily_home_energy_entity: this.findBestEntity(['today load consumption', 'daily home', 'load consumption'], ['sensor'])?.entityId,
+            daily_grid_import_energy_entity: this.findBestEntity(['today energy import', 'daily import', 'energy import'], ['sensor'])?.entityId,
+            daily_grid_export_energy_entity: this.findBestEntity(['today energy export', 'daily export', 'energy export'], ['sensor'])?.entityId,
+            daily_battery_charge_energy_entity: this.findBestEntity(['today battery charge', 'battery charge'], ['sensor'])?.entityId,
+            daily_battery_discharge_energy_entity: this.findBestEntity(['today battery discharge', 'battery discharge'], ['sensor'])?.entityId,
+            battery_state_entity: this.findBestEntity(['battery state'], ['sensor'])?.entityId,
+            battery_soh_entity: this.findBestEntity(['battery soh'], ['sensor'])?.entityId,
+            battery_temperature_entity: this.findBestEntity(['battery temperature'], ['sensor'])?.entityId,
+            inverter_temperature_entity: this.findBestEntity(['inverter temperature', 'device temperature', 'temperature'], ['sensor'])?.entityId,
+            device_alarm_entity: this.findBestEntity(['device alarm', 'alarm'], ['sensor'])?.entityId,
+            device_fault_entity: this.findBestEntity(['device fault', 'fault'], ['sensor'])?.entityId,
+            battery_alarm_entity: this.findBestEntity(['battery alarm'], ['binary_sensor', 'sensor'])?.entityId,
+            battery_fault_entity: this.findBestEntity(['battery fault'], ['binary_sensor', 'sensor'])?.entityId,
+            work_mode_entity: this.findBestEntity(['work mode'], ['sensor', 'select'])?.entityId,
+            energy_pattern_entity: this.findBestEntity(['energy pattern'], ['sensor', 'select'])?.entityId,
+            pv1_power_entity: this.findBestEntity(['pv1 power', 'pv1_power'], ['sensor'])?.entityId,
+            pv2_power_entity: this.findBestEntity(['pv2 power', 'pv2_power'], ['sensor'])?.entityId,
+            pv3_power_entity: this.findBestEntity(['pv3 power', 'pv3_power'], ['sensor'])?.entityId,
+            load_l1_power_entity: this.findBestEntity(['load l1 power', 'load_l1_power'], ['sensor'])?.entityId,
+            load_l2_power_entity: this.findBestEntity(['load l2 power', 'load_l2_power'], ['sensor'])?.entityId,
+            load_l3_power_entity: this.findBestEntity(['load l3 power', 'load_l3_power'], ['sensor'])?.entityId,
+            grid_l1_power_entity: this.findBestEntity(['grid l1 power', 'grid_l1_power'], ['sensor'])?.entityId,
+            grid_l2_power_entity: this.findBestEntity(['grid l2 power', 'grid_l2_power'], ['sensor'])?.entityId,
+            grid_l3_power_entity: this.findBestEntity(['grid l3 power', 'grid_l3_power'], ['sensor'])?.entityId,
+            view_mode: 'advanced',
+            visual_preset: profile === 'generic' ? 'default' : 'analytics',
+        };
+        if (mode === 'advanced') {
+            return advanced;
+        }
+        if (profile === 'solarman') {
+            return {
+                ...advanced,
+                theme: this._config?.theme ?? 'sunset',
+                layout: this._config?.layout ?? 'balanced',
+                show_pv_breakdown: true,
+                show_phase_breakdown: true,
+            };
+        }
+        if (profile === 'deye_sunsynk') {
+            return {
+                ...advanced,
+                theme: this._config?.theme ?? 'aurora',
+                visual_preset: 'analytics',
+                show_pv_breakdown: true,
+                show_phase_breakdown: true,
+            };
+        }
+        return advanced;
+    }
+    detectProfile() {
+        const entityIds = Object.keys(this.hass?.states ?? {}).join(' ').toLowerCase();
+        if (entityIds.includes('solarman'))
+            return 'solarman';
+        if (entityIds.includes('deye') || entityIds.includes('sunsynk'))
+            return 'deye_sunsynk';
+        return 'generic';
+    }
+    applySuggestedConfig(patch) {
+        const sanitized = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined && value !== ''));
+        const nextConfig = {
+            ...this._config,
+            ...sanitized,
+        };
+        this._config = nextConfig;
+        this.dispatchEvent(new CustomEvent('config-changed', {
+            detail: { config: nextConfig },
+            bubbles: true,
+            composed: true,
+        }));
+    }
     makeRecommendation(label, key, phrases, includeDomains = ['sensor', 'binary_sensor']) {
         const candidate = this.findBestEntity(phrases, includeDomains);
         if (!candidate)
@@ -571,6 +689,33 @@ ZsPowerFlowCardEditor.styles = i$3 `
     .validation-list {
       display: grid;
       gap: 10px;
+    }
+
+    .wizard-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .wizard-button {
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(239,246,255,0.94));
+      color: var(--primary-text-color);
+      border-radius: 14px;
+      padding: 11px 14px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .wizard-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(59, 130, 246, 0.32);
+      box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+    }
+
+    .wizard-button.secondary {
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(249,250,251,0.94));
     }
 
     .recommendation {
@@ -826,6 +971,11 @@ function createOptionalBreakdown(hass, entries) {
     })
         .filter((item) => item !== null);
 }
+function ratioOrNull(numerator, denominator) {
+    if (numerator === null || denominator === null || denominator <= 0)
+        return null;
+    return clamp((numerator / denominator) * 100, 0, 100);
+}
 function getThemeTokens(theme) {
     return THEMES[theme ?? 'aurora'];
 }
@@ -886,9 +1036,28 @@ function buildSnapshot(hass, config) {
             : 'unassigned_demand';
     const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
     const netHomeDemand = Math.max(0, home - solarToHome);
+    const currentSourceTotal = solarToHome + gridToHome + batteryToHome;
+    const dailySolarSelfUsed = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) !== null &&
+        parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) !== null
+        ? Math.max(0, (parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) ?? 0) -
+            (parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) ?? 0))
+        : null;
+    const dailyHomeValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity));
+    const dailyImportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity));
+    const dailySolarValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity));
+    const batteryRuntimeHours = batteryStoredKwh !== null && home > 0 ? batteryStoredKwh / (home / 1000) : null;
+    const residualRate = home > 0 ? clamp((residualPower / home) * 100, 0, 100) : null;
     const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
     const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
     const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
+    const dailyEnergy = {
+        solar: dailySolarValue,
+        home: dailyHomeValue,
+        gridImport: dailyImportValue,
+        gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+        batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
+        batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
+    };
     return {
         solar: createNode(config.solar_label ?? 'Produkcja', solar, solar, themeTokens.solar, 'PV'),
         grid: createNode(config.grid_label ?? 'Siec', grid, effectiveGrid, themeTokens.grid, effectiveGrid >= 0 ? 'Import' : 'Eksport'),
@@ -921,14 +1090,20 @@ function buildSnapshot(hass, config) {
         batteryFault: parseOptionalBoolean(getEntity(hass, config.battery_fault_entity)),
         workMode: parseEntityText(getEntity(hass, config.work_mode_entity)),
         energyPattern: parseEntityText(getEntity(hass, config.energy_pattern_entity)),
-        dailyEnergy: {
-            solar: parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)),
-            home: parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity)),
-            gridImport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity)),
-            gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
-            batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
-            batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
+        analytics: {
+            currentSourceMix: {
+                solar: currentSourceTotal > 0 ? (solarToHome / currentSourceTotal) * 100 : 0,
+                grid: currentSourceTotal > 0 ? (gridToHome / currentSourceTotal) * 100 : 0,
+                battery: currentSourceTotal > 0 ? (batteryToHome / currentSourceTotal) * 100 : 0,
+            },
+            selfConsumptionRate: ratioOrNull(dailySolarSelfUsed, dailySolarValue),
+            selfSufficiencyRate: dailyHomeValue !== null && dailyImportValue !== null
+                ? ratioOrNull(Math.max(0, dailyHomeValue - dailyImportValue), dailyHomeValue)
+                : null,
+            batteryRuntimeHours,
+            residualRate,
         },
+        dailyEnergy,
         pvBreakdown: createOptionalBreakdown(hass, [
             { label: 'PV1', entityId: config.pv1_power_entity },
             { label: 'PV2', entityId: config.pv2_power_entity },
@@ -1122,6 +1297,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : A}
+          ${advanced ? this.renderAnalyticsRail(snapshot) : A}
           ${advanced ? this.renderHealthRail(snapshot) : A}
           ${advanced ? this.renderBreakdowns(snapshot) : A}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : A}
@@ -1426,6 +1602,45 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       </section>
     `;
     }
+    renderAnalyticsRail(snapshot) {
+        return b `
+      <section class="analytics-rail">
+        <div class="analytics-card kpi">
+          <span>Autokonsumpcja dzisiaj</span>
+          <strong>${this.formatPercent(snapshot.analytics.selfConsumptionRate)}</strong>
+          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udzial energii PV zuzytej lokalnie'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Samowystarczalnosc dzisiaj</span>
+          <strong>${this.formatPercent(snapshot.analytics.selfSufficiencyRate)}</strong>
+          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udzial zuzycia pokrytego bez importu'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Bufor baterii</span>
+          <strong>${this.formatHours(snapshot.analytics.batteryRuntimeHours)}</strong>
+          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemnosci lub SOC' : 'Szacowany czas pokrycia aktualnego obciazenia'}</small>
+        </div>
+        <div class="analytics-card kpi">
+          <span>Reszta bilansu</span>
+          <strong>${this.formatPercent(snapshot.analytics.residualRate)}</strong>
+          <small>${this.describeResidualLabel(snapshot)}</small>
+        </div>
+        <div class="analytics-card mix">
+          <span>Aktualny mix zasilania domu</span>
+          <div class="mix-bar" aria-hidden="true">
+            <div class="mix-segment solar" style=${`width:${snapshot.analytics.currentSourceMix.solar.toFixed(1)}%`}></div>
+            <div class="mix-segment battery" style=${`width:${snapshot.analytics.currentSourceMix.battery.toFixed(1)}%`}></div>
+            <div class="mix-segment grid" style=${`width:${snapshot.analytics.currentSourceMix.grid.toFixed(1)}%`}></div>
+          </div>
+          <div class="mix-legend">
+            <span>PV ${this.formatPercent(snapshot.analytics.currentSourceMix.solar, 0)}</span>
+            <span>Bat ${this.formatPercent(snapshot.analytics.currentSourceMix.battery, 0)}</span>
+            <span>Grid ${this.formatPercent(snapshot.analytics.currentSourceMix.grid, 0)}</span>
+          </div>
+        </div>
+      </section>
+    `;
+    }
     renderBreakdowns(snapshot) {
         const showPv = (this._config.show_pv_breakdown ?? true) && snapshot.pvBreakdown.length > 0;
         const showLoadPhases = (this._config.show_phase_breakdown ?? true) && snapshot.loadPhaseBreakdown.length > 0;
@@ -1522,6 +1737,18 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             return 'Brakujace zrodlo / dane';
         }
         return 'Bilans pozostaly';
+    }
+    formatPercent(value, decimals = 1) {
+        if (value === null)
+            return '--';
+        return `${value.toFixed(decimals)}%`;
+    }
+    formatHours(value) {
+        if (value === null)
+            return '--';
+        if (value >= 10)
+            return `${value.toFixed(0)} h`;
+        return `${value.toFixed(1)} h`;
     }
     handleTap(entityId) {
         if (this._holdTriggered) {
@@ -1786,7 +2013,7 @@ ZsPowerFlowCard.styles = i$3 `
       height: 168px;
       display: grid;
       place-items: center;
-      z-index: 2;
+      z-index: 4;
     }
 
     .flow-anchor {
@@ -2136,6 +2363,13 @@ ZsPowerFlowCard.styles = i$3 `
       margin-top: 12px;
     }
 
+    .analytics-rail {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
     .rail-card {
       padding: 14px 16px;
       border-radius: 18px;
@@ -2152,6 +2386,65 @@ ZsPowerFlowCard.styles = i$3 `
         linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
         rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .analytics-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .analytics-card span,
+    .analytics-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .analytics-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.05rem;
+    }
+
+    .analytics-card.mix {
+      grid-column: span 2;
+    }
+
+    .mix-bar {
+      margin-top: 10px;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.06);
+      display: flex;
+    }
+
+    .mix-segment {
+      height: 100%;
+    }
+
+    .mix-segment.solar {
+      background: var(--zs-solar);
+    }
+
+    .mix-segment.battery {
+      background: var(--zs-battery);
+    }
+
+    .mix-segment.grid {
+      background: var(--zs-grid);
+    }
+
+    .mix-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      color: var(--zs-muted);
+      font-size: 0.82rem;
     }
 
     .health-card.warn {
@@ -2298,6 +2591,7 @@ ZsPowerFlowCard.styles = i$3 `
       }
 
       .advanced-rail,
+      .analytics-rail,
       .health-rail,
       .breakdown-grid {
         grid-template-columns: 1fr;
@@ -2378,6 +2672,7 @@ ZsPowerFlowCard.styles = i$3 `
       }
 
       .advanced-rail,
+      .analytics-rail,
       .health-rail,
       .breakdown-grid {
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

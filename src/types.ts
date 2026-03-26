@@ -3,6 +3,7 @@ export type FlowLayout = 'balanced' | 'focus-home';
 export type DetailsMode = 'summary' | 'extended';
 export type ViewMode = 'simple' | 'advanced';
 export type VisualPreset = 'default' | 'compact' | 'analytics';
+export type FlowStyle = 'soft' | 'beam' | 'pulse';
 
 export interface HomeAssistantLike {
   states: Record<string, { state: string; attributes?: Record<string, unknown> }>;
@@ -48,6 +49,7 @@ export interface ZsPowerFlowCardConfig {
   layout?: FlowLayout;
   view_mode?: ViewMode;
   visual_preset?: VisualPreset;
+  flow_style?: FlowStyle;
   show_details?: boolean;
   details_mode?: DetailsMode;
   show_solar?: boolean;

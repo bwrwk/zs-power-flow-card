@@ -130,6 +130,11 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ['compact', 'Compact'],
             ['analytics', 'Analytics'],
         ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
+            ${this.renderSelectField('Styl flow', 'flow_style', config.flow_style ?? 'soft', [
+            ['soft', 'Soft'],
+            ['beam', 'Beam'],
+            ['pulse', 'Pulse'],
+        ], 'Zmienia charakter animacji przeplywu energii bez zmiany danych.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
             ['summary', 'Summary'],
             ['extended', 'Extended'],
@@ -265,7 +270,7 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           .value=${value}
           @change=${(event) => this.updateConfig(key, event.target.value)}
         >
-          ${options.map(([optionValue, optionLabel]) => b `<option value=${optionValue}>${optionLabel}</option>`)}
+          ${options.map(([optionValue, optionLabel]) => b `<option value=${optionValue} ?selected=${value === optionValue}>${optionLabel}</option>`)}
         </select>
         ${helpText ? b `<span class="helper">${helpText}</span>` : ''}
       </label>
@@ -702,6 +707,7 @@ const DEFAULT_CONFIG = {
     layout: 'balanced',
     view_mode: 'simple',
     visual_preset: 'default',
+    flow_style: 'soft',
     show_details: true,
     details_mode: 'summary',
     show_solar: true,
@@ -737,6 +743,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         const layoutClass = this._config.layout === 'focus-home' ? 'layout-focus-home' : 'layout-balanced';
         const advanced = this._config.view_mode === 'advanced';
         const presetClass = `preset-${this._config.visual_preset ?? 'default'}`;
+        const flowStyleClass = `flow-style-${this._config.flow_style ?? 'soft'}`;
         return b `
       <ha-card
         style=${`--zs-panel:${theme.panel}; --zs-border:${theme.border}; --zs-text:${theme.text}; --zs-muted:${theme.muted}; --zs-solar:${theme.solar}; --zs-grid:${theme.grid}; --zs-battery:${theme.battery}; --zs-home:${theme.home};`}
@@ -754,7 +761,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             </div>
           </div>
 
-          <div class=${`stage ${layoutClass} ${presetClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
+          <div class=${`stage ${layoutClass} ${presetClass} ${flowStyleClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
             <div class="ambient ambient-a"></div>
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
@@ -765,15 +772,15 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', this._config.battery_power_entity, snapshot.battery.soc) : A}
             ${this.renderNode(snapshot.home, 'bottom right', 'home', this._config.home_entity)}
 
-            ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : A}
+            ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 206 142 C 238 142, 258 154, 283 177') : A}
             ${this._config.show_solar && this._config.show_battery
-            ? this.renderFlow(snapshot.solarToBattery, snapshot.battery.accent, 'M 170 165 C 170 255, 210 288, 305 310')
+            ? this.renderFlow(snapshot.solarToBattery, snapshot.battery.accent, 'M 190 170 C 190 238, 218 275, 284 299')
             : A}
             ${this._config.show_solar && this._config.show_grid
-            ? this.renderFlow(snapshot.solarToGrid, snapshot.grid.accent, 'M 240 120 C 345 100, 400 110, 470 130')
+            ? this.renderFlow(snapshot.solarToGrid, snapshot.grid.accent, 'M 232 126 C 318 92, 404 96, 482 124')
             : A}
-            ${this._config.show_grid ? this.renderFlow(snapshot.gridToHome, snapshot.grid.accent, 'M 493 160 C 493 236, 468 270, 396 308') : A}
-            ${this._config.show_battery ? this.renderFlow(snapshot.batteryToHome, snapshot.battery.accent, 'M 355 324 C 410 338, 455 334, 505 318') : A}
+            ${this._config.show_grid ? this.renderFlow(snapshot.gridToHome, snapshot.grid.accent, 'M 486 164 C 503 198, 488 244, 430 282') : A}
+            ${this._config.show_battery ? this.renderFlow(snapshot.batteryToHome, snapshot.battery.accent, 'M 358 315 C 402 328, 448 328, 498 312') : A}
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : A}
@@ -860,15 +867,22 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         return paths[iconName];
     }
     renderFlow(power, color, path) {
-        const active = power > 0.05;
-        const width = Math.max(2, Math.min(10, power * 2.2));
+        const active = power > 12;
+        const width = Math.max(2, Math.min(8, Math.abs(power) < 250 ? 2.6 : Math.abs(power) / 420));
         const animate = this._config.animation_enabled ?? true;
+        const glow = Math.max(0.16, Math.min(0.42, Math.abs(power) / 3000));
+        const style = this._config.flow_style ?? 'soft';
         return b `
       <svg class="flow" viewBox="0 0 640 420" preserveAspectRatio="none" aria-hidden="true">
         <path class="flow-track" d=${path}></path>
         <path
-          class=${`flow-line ${active ? 'visible' : ''} ${active && animate ? 'active' : ''}`}
-          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.2, 7.8 - power)}s;`}
+          class=${`flow-aura ${style} ${active ? 'visible' : ''}`}
+          style=${`--flow-color:${color}; --flow-width:${width + 4}px; --flow-opacity:${glow};`}
+          d=${path}
+        ></path>
+        <path
+          class=${`flow-line ${style} ${active ? 'visible' : ''} ${active && animate ? 'active' : ''}`}
+          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.6, 7.6 - Math.min(Math.abs(power) / 700, 4.2))}s;`}
           d=${path}
         ></path>
       </svg>
@@ -1382,9 +1396,22 @@ ZsPowerFlowCard.styles = i$3 `
 
     .flow-track {
       fill: none;
-      stroke: rgba(255, 255, 255, 0.08);
+      stroke: rgba(255, 255, 255, 0.06);
       stroke-width: 2;
       stroke-linecap: round;
+    }
+
+    .flow-aura {
+      fill: none;
+      stroke: var(--flow-color);
+      stroke-width: var(--flow-width);
+      stroke-linecap: round;
+      opacity: 0;
+      filter: blur(8px);
+    }
+
+    .flow-aura.visible {
+      opacity: var(--flow-opacity);
     }
 
     .flow-line {
@@ -1392,17 +1419,45 @@ ZsPowerFlowCard.styles = i$3 `
       stroke: var(--flow-color);
       stroke-width: var(--flow-width);
       stroke-linecap: round;
-      stroke-dasharray: 8 14;
-      opacity: 0.1;
-      filter: drop-shadow(0 0 12px color-mix(in srgb, var(--flow-color) 60%, transparent));
+      stroke-dasharray: 18 24;
+      opacity: 0.14;
+      filter: drop-shadow(0 0 10px color-mix(in srgb, var(--flow-color) 45%, transparent));
+    }
+
+    .flow-line.soft {
+      stroke-dasharray: 18 24;
+    }
+
+    .flow-line.beam {
+      stroke-dasharray: 28 34;
+      filter: drop-shadow(0 0 14px color-mix(in srgb, var(--flow-color) 55%, transparent));
+    }
+
+    .flow-line.pulse {
+      stroke-dasharray: 10 18;
+      filter: drop-shadow(0 0 12px color-mix(in srgb, var(--flow-color) 52%, transparent));
+    }
+
+    .flow-aura.beam.visible {
+      opacity: calc(var(--flow-opacity) + 0.08);
+    }
+
+    .flow-aura.pulse.visible {
+      opacity: calc(var(--flow-opacity) + 0.02);
     }
 
     .flow-line.visible {
-      opacity: 0.95;
+      opacity: 0.9;
     }
 
     .flow-line.active {
       animation: flow var(--flow-speed) linear infinite;
+    }
+
+    .flow-line.pulse.active {
+      animation:
+        flow var(--flow-speed) linear infinite,
+        flowPulse 2.8s ease-in-out infinite;
     }
 
     .details {
@@ -1528,16 +1583,20 @@ ZsPowerFlowCard.styles = i$3 `
 
     .details.advanced {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: start;
     }
 
     .detail-card {
-      padding: 14px 16px;
+      padding: 12px 14px;
       border-radius: 18px;
       background:
         linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
         rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.06);
-      min-height: 82px;
+      min-height: 68px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
     .detail-card.highlight {
@@ -1549,18 +1608,21 @@ ZsPowerFlowCard.styles = i$3 `
       background:
         linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018)),
         rgba(5, 9, 17, 0.18);
+      min-height: 70px;
     }
 
     .detail-card span {
       display: block;
       color: var(--zs-muted);
-      margin-bottom: 6px;
-      font-size: 0.82rem;
-      line-height: 1.4;
+      margin-bottom: 4px;
+      font-size: 0.77rem;
+      line-height: 1.3;
     }
 
     .detail-card strong {
-      font-size: 1.02rem;
+      font-size: 1.3rem;
+      line-height: 1.02;
+      letter-spacing: -0.01em;
     }
 
     @keyframes flow {
@@ -1568,7 +1630,16 @@ ZsPowerFlowCard.styles = i$3 `
         stroke-dashoffset: 0;
       }
       to {
-        stroke-dashoffset: -132;
+        stroke-dashoffset: -168;
+      }
+    }
+
+    @keyframes flowPulse {
+      0%, 100% {
+        opacity: 0.72;
+      }
+      50% {
+        opacity: 1;
       }
     }
 
@@ -1682,6 +1753,18 @@ ZsPowerFlowCard.styles = i$3 `
 
       .details.advanced {
         grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .detail-card {
+        min-height: 72px;
+      }
+
+      .detail-card.metric {
+        min-height: 74px;
+      }
+
+      .detail-card strong {
+        font-size: 1.36rem;
       }
 
       .advanced-rail {

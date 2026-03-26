@@ -72,6 +72,11 @@ export class ZsPowerFlowCardEditor extends LitElement {
               ['compact', 'Compact'],
               ['analytics', 'Analytics'],
             ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
+            ${this.renderSelectField('Styl flow', 'flow_style', config.flow_style ?? 'soft', [
+              ['soft', 'Soft'],
+              ['beam', 'Beam'],
+              ['pulse', 'Pulse'],
+            ], 'Zmienia charakter animacji przeplywu energii bez zmiany danych.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
               ['summary', 'Summary'],
               ['extended', 'Extended'],
@@ -224,7 +229,10 @@ export class ZsPowerFlowCardEditor extends LitElement {
           .value=${value}
           @change=${(event: Event) => this.updateConfig(key, (event.target as HTMLSelectElement).value)}
         >
-          ${options.map(([optionValue, optionLabel]) => html`<option value=${optionValue}>${optionLabel}</option>`)}
+          ${options.map(
+            ([optionValue, optionLabel]) =>
+              html`<option value=${optionValue} ?selected=${value === optionValue}>${optionLabel}</option>`,
+          )}
         </select>
         ${helpText ? html`<span class="helper">${helpText}</span>` : ''}
       </label>

@@ -864,6 +864,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     renderCore(snapshot, advanced) {
         return b `
       <div class="core">
+        <span class="flow-anchor core-anchor top-left"></span>
+        <span class="flow-anchor core-anchor top-right"></span>
+        <span class="flow-anchor core-anchor bottom-left"></span>
+        <span class="flow-anchor core-anchor bottom-right"></span>
         <div class="core-ring"></div>
         <div class="core-ring pulse"></div>
         <div class="core-content">
@@ -881,6 +885,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         style=${`--accent:${node.accent};`}
         @click=${() => this.showMoreInfo(entityId)}
       >
+        <span class=${`flow-anchor node-anchor ${iconName}`}></span>
         <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
@@ -956,57 +961,37 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (!stage || !core)
             return;
         const stageRect = stage.getBoundingClientRect();
-        const coreRect = core.getBoundingClientRect();
-        const sourceRects = {
-            solar: stage.querySelector('.node.top.left')?.getBoundingClientRect(),
-            grid: stage.querySelector('.node.top.right')?.getBoundingClientRect(),
-            battery: stage.querySelector('.node.bottom.left')?.getBoundingClientRect(),
-            home: stage.querySelector('.node.bottom.right')?.getBoundingClientRect(),
+        const anchors = {
+            solar: stage.querySelector('.node-anchor.solar')?.getBoundingClientRect(),
+            grid: stage.querySelector('.node-anchor.grid')?.getBoundingClientRect(),
+            battery: stage.querySelector('.node-anchor.battery')?.getBoundingClientRect(),
+            home: stage.querySelector('.node-anchor.home')?.getBoundingClientRect(),
+            coreTopLeft: stage.querySelector('.core-anchor.top-left')?.getBoundingClientRect(),
+            coreTopRight: stage.querySelector('.core-anchor.top-right')?.getBoundingClientRect(),
+            coreBottomLeft: stage.querySelector('.core-anchor.bottom-left')?.getBoundingClientRect(),
+            coreBottomRight: stage.querySelector('.core-anchor.bottom-right')?.getBoundingClientRect(),
         };
-        const coreCenter = {
-            x: coreRect.left - stageRect.left + coreRect.width / 2,
-            y: coreRect.top - stageRect.top + coreRect.height / 2,
-        };
-        const coreRadius = Math.min(coreRect.width, coreRect.height) * 0.5 + 8;
         const nextPaths = {
-            solar: this.buildHubPath(sourceRects.solar, stageRect, coreCenter, coreRadius, 'left'),
-            grid: this.buildHubPath(sourceRects.grid, stageRect, coreCenter, coreRadius, 'right'),
-            battery: this.buildHubPath(sourceRects.battery, stageRect, coreCenter, coreRadius, 'bottom-left'),
-            home: this.buildHubPath(sourceRects.home, stageRect, coreCenter, coreRadius, 'bottom-right', true),
+            solar: this.buildAnchoredPath(anchors.solar, anchors.coreTopLeft, stageRect, 'left'),
+            grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopRight, stageRect, 'right'),
+            battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
+            home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
         };
         if (JSON.stringify(nextPaths) !== JSON.stringify(this._flowPaths)) {
             this._flowPaths = nextPaths;
         }
     }
-    buildHubPath(rect, stageRect, coreCenter, coreRadius, anchor, fromHub = false) {
-        if (!rect)
+    buildAnchoredPath(fromRect, toRect, stageRect, anchor) {
+        if (!fromRect || !toRect)
             return '';
-        const node = {
-            left: rect.left - stageRect.left,
-            top: rect.top - stageRect.top,
-            right: rect.right - stageRect.left,
-            bottom: rect.bottom - stageRect.top,
-            width: rect.width,
-            height: rect.height,
-            centerX: rect.left - stageRect.left + rect.width / 2,
-            centerY: rect.top - stageRect.top + rect.height / 2,
+        const fromPoint = {
+            x: fromRect.left - stageRect.left + fromRect.width / 2,
+            y: fromRect.top - stageRect.top + fromRect.height / 2,
         };
-        let start = { x: node.right, y: node.centerY };
-        let end = { x: coreCenter.x - coreRadius, y: coreCenter.y };
-        if (anchor === 'right') {
-            start = { x: node.left, y: node.centerY };
-            end = { x: coreCenter.x + coreRadius, y: coreCenter.y };
-        }
-        else if (anchor === 'bottom-left') {
-            start = { x: node.right - 6, y: node.top + node.height * 0.18 };
-            end = { x: coreCenter.x - coreRadius * 0.78, y: coreCenter.y + coreRadius * 0.72 };
-        }
-        else if (anchor === 'bottom-right') {
-            start = { x: coreCenter.x + coreRadius * 0.86, y: coreCenter.y + coreRadius * 0.68 };
-            end = { x: node.left + 8, y: node.top + node.height * 0.18 };
-        }
-        const fromPoint = fromHub ? start : start;
-        const toPoint = fromHub ? end : end;
+        const toPoint = {
+            x: toRect.left - stageRect.left + toRect.width / 2,
+            y: toRect.top - stageRect.top + toRect.height / 2,
+        };
         const control1 = this.computeControlPoint(fromPoint, toPoint, anchor, true);
         const control2 = this.computeControlPoint(fromPoint, toPoint, anchor, false);
         return `M ${fromPoint.x.toFixed(1)} ${fromPoint.y.toFixed(1)} C ${control1.x.toFixed(1)} ${control1.y.toFixed(1)}, ${control2.x.toFixed(1)} ${control2.y.toFixed(1)}, ${toPoint.x.toFixed(1)} ${toPoint.y.toFixed(1)}`;
@@ -1384,6 +1369,55 @@ ZsPowerFlowCard.styles = i$3 `
       display: grid;
       place-items: center;
       z-index: 2;
+    }
+
+    .flow-anchor {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .node-anchor.solar {
+      right: 8px;
+      top: calc(50% - 4px);
+    }
+
+    .node-anchor.grid {
+      left: 8px;
+      top: calc(50% - 4px);
+    }
+
+    .node-anchor.battery {
+      right: 14px;
+      top: 18px;
+    }
+
+    .node-anchor.home {
+      left: 8px;
+      top: 22px;
+    }
+
+    .core-anchor.top-left {
+      left: 28px;
+      top: 44px;
+    }
+
+    .core-anchor.top-right {
+      right: 28px;
+      top: 44px;
+    }
+
+    .core-anchor.bottom-left {
+      left: 28px;
+      bottom: 44px;
+    }
+
+    .core-anchor.bottom-right {
+      right: 28px;
+      bottom: 44px;
     }
 
     .stage.layout-focus-home .core {

@@ -1667,24 +1667,155 @@ export class ZsPowerFlowCard extends LitElement {
         padding: 16px;
       }
 
+      h2 {
+        font-size: 2rem;
+      }
+
+      .subtitle {
+        font-size: 0.88rem;
+      }
+
+      .hero {
+        margin-bottom: 14px;
+      }
+
       .stage {
-        min-height: 700px;
+        min-height: 720px;
+      }
+
+      .top.left,
+      .top.right {
+        top: 18px;
+      }
+
+      .bottom.left,
+      .bottom.right {
+        bottom: 18px;
+      }
+
+      .top.left,
+      .bottom.left {
+        left: 18px;
+      }
+
+      .top.right,
+      .bottom.right {
+        right: 18px;
       }
 
       .node {
-        width: calc(50% - 20px);
-        gap: 10px;
-        padding: 14px;
+        width: calc(50% - 40px);
+        max-width: 146px;
+        min-width: 118px;
+        padding: 12px 10px;
+        gap: 8px;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        border-radius: 20px;
       }
 
       .icon {
-        width: 46px;
-        height: 46px;
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+      }
+
+      .icon svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .meta {
+        width: 100%;
+        justify-items: center;
+        gap: 3px;
+      }
+
+      .label,
+      .meta small {
+        font-size: 0.74rem;
+        line-height: 1.2;
+      }
+
+      .meta strong {
+        font-size: 1rem;
+        line-height: 1.05;
+      }
+
+      .soc {
+        font-size: 0.72rem;
+      }
+
+      .core {
+        width: 154px;
+        height: 154px;
+      }
+
+      .stage.layout-focus-home .core {
+        width: 168px;
+        height: 168px;
+      }
+
+      .core-content {
+        padding: 18px;
+      }
+
+      .core-content strong {
+        font-size: 1.3rem;
+      }
+
+      .core-content small {
+        font-size: 0.8rem;
+        line-height: 1.25;
+      }
+
+      .status-rail {
+        gap: 6px;
+      }
+
+      .badge,
+      .status-pill {
+        padding: 8px 12px;
+        font-size: 0.76rem;
       }
 
       .details.simple,
       .details.advanced {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .stage {
+        min-height: 740px;
+      }
+
+      .node {
+        width: calc(50% - 34px);
+        max-width: 138px;
+        min-width: 108px;
+        padding: 11px 8px;
+      }
+
+      .meta strong {
+        font-size: 0.94rem;
+      }
+
+      .label,
+      .meta small,
+      .soc {
+        font-size: 0.7rem;
+      }
+
+      .core {
+        width: 146px;
+        height: 146px;
+      }
+
+      .stage.layout-focus-home .core {
+        width: 160px;
+        height: 160px;
       }
     }
   `;

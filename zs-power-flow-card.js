@@ -94,12 +94,12 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           </div>
 
           <div class="grid two">
-            ${this.renderEntityField('Produkcja PV', 'solar_entity', config.solar_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Moc sieci', 'grid_entity', config.grid_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Zuzycie domu', 'home_entity', config.home_entity ?? '', ['sensor'])}
-            ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh)}
+            ${this.renderEntityField('Produkcja PV', 'solar_entity', config.solar_entity ?? '', ['sensor'], 'Aktualna moc produkcji z paneli. Najczesciej sensor w W lub kW, np. laczna moc PV.')}
+            ${this.renderEntityField('Moc sieci', 'grid_entity', config.grid_entity ?? '', ['sensor'], 'Aktualna moc wymiany z siecia. Oczekiwane: plus = import, minus = eksport.')}
+            ${this.renderEntityField('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '', ['sensor'], 'Aktualna moc baterii. Oczekiwane: plus = rozladowanie do domu, minus = ladowanie.')}
+            ${this.renderEntityField('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '', ['sensor'], 'Procent naladowania baterii, najlepiej sensor 0-100.')}
+            ${this.renderEntityField('Zuzycie domu', 'home_entity', config.home_entity ?? '', ['sensor'], 'Calkowita aktualna moc odbiorow domu.')}
+            ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh, 'Sluzy do wyliczenia energii zgromadzonej w baterii na podstawie SOC.')}
           </div>
 
           <p class="hint">Konwencja tej wersji: siec plus = import, minus = eksport; bateria plus = rozladowanie, minus = ladowanie.</p>
@@ -115,21 +115,21 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ${this.renderSelectField('Widok', 'view_mode', config.view_mode ?? 'simple', [
             ['simple', 'Simple'],
             ['advanced', 'Advanced'],
-        ])}
+        ], 'Simple pokazuje najwazniejsze dane, a advanced dodaje statusy i metryki dzienne.')}
             ${this.renderSelectField('Motyw', 'theme', config.theme ?? 'aurora', [
             ['aurora', 'Aurora'],
             ['graphite', 'Graphite'],
             ['sunset', 'Sunset'],
-        ])}
+        ], 'Zmienia palete kolorow i charakter wizualny karty.')}
             ${this.renderSelectField('Layout', 'layout', config.layout ?? 'balanced', [
             ['balanced', 'Balanced'],
             ['focus-home', 'Focus home'],
-        ])}
+        ], 'Balanced jest bardziej symetryczny, a Focus home bardziej eksponuje zuzycie domu.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
             ['summary', 'Summary'],
             ['extended', 'Extended'],
-        ])}
-            ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals)}
+        ], 'Extended pokazuje wiecej kart z przeplywami i energiami dziennymi.')}
+            ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals, 'Ile cyfr po przecinku pokazywac dla wartosci mocy.')}
           </div>
 
           <div class="toggle-grid">
@@ -149,14 +149,14 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           </div>
 
           <div class="grid two">
-            ${this.renderEntityField('Stan on/off-grid', 'grid_connected_entity', config.grid_connected_entity ?? '', ['binary_sensor', 'sensor'])}
-            ${this.renderEntityField('Status inwertera', 'inverter_status_entity', config.inverter_status_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Produkcja dzienna', 'daily_solar_energy_entity', config.daily_solar_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Zuzycie dzienne', 'daily_home_energy_entity', config.daily_home_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Import dzienny', 'daily_grid_import_energy_entity', config.daily_grid_import_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityField('Stan on/off-grid', 'grid_connected_entity', config.grid_connected_entity ?? '', ['binary_sensor', 'sensor'], 'Binary sensor lub sensor tekstowy wskazujacy, czy falownik pracuje z siecia. Obslugiwane m.in. on/off, connected/disconnected.')}
+            ${this.renderEntityField('Status inwertera', 'inverter_status_entity', config.inverter_status_entity ?? '', ['sensor'], 'Tekstowy status pracy inwertera, np. Normal, Fault, Standby.')}
+            ${this.renderEntityField('Produkcja dzienna', 'daily_solar_energy_entity', config.daily_solar_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia wyprodukowana przez PV, najlepiej w kWh.')}
+            ${this.renderEntityField('Zuzycie dzienne', 'daily_home_energy_entity', config.daily_home_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia zuzyta przez odbiory domu.')}
+            ${this.renderEntityField('Import dzienny', 'daily_grid_import_energy_entity', config.daily_grid_import_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia pobrana z sieci.')}
+            ${this.renderEntityField('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana do sieci.')}
+            ${this.renderEntityField('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia wlozona do baterii.')}
+            ${this.renderEntityField('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana z baterii.')}
           </div>
         </section>
 
@@ -188,7 +188,7 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
       </label>
     `;
     }
-    renderNumberField(label, key, value) {
+    renderNumberField(label, key, value, helpText) {
         return b `
       <label class="field">
         <span class="field-label">${label}</span>
@@ -201,10 +201,11 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             this.updateConfig(key, next === '' ? undefined : Number(next));
         }}
         />
+        ${helpText ? b `<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
     }
-    renderEntityField(label, key, value, includeDomains) {
+    renderEntityField(label, key, value, includeDomains, helpText) {
         const listId = `entities-${String(key)}`;
         const entityIds = this.getEntityIds(includeDomains);
         return b `
@@ -215,15 +216,19 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           .value=${value}
           list=${listId}
           placeholder="sensor.twoja_encja"
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
           @input=${(event) => this.updateConfig(key, event.target.value || undefined)}
         />
         <datalist id=${listId}>
           ${entityIds.map((entityId) => b `<option value=${entityId}></option>`)}
         </datalist>
+        ${helpText ? b `<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
     }
-    renderSelectField(label, key, value, options) {
+    renderSelectField(label, key, value, options, helpText) {
         return b `
       <label class="field">
         <span class="field-label">${label}</span>
@@ -234,6 +239,7 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
         >
           ${options.map(([optionValue, optionLabel]) => b `<option value=${optionValue}>${optionLabel}</option>`)}
         </select>
+        ${helpText ? b `<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
     }
@@ -324,6 +330,12 @@ ZsPowerFlowCardEditor.styles = i$3 `
 
     .field-label {
       font-size: 0.85rem;
+      color: var(--secondary-text-color);
+    }
+
+    .helper {
+      font-size: 0.79rem;
+      line-height: 1.4;
       color: var(--secondary-text-color);
     }
 
@@ -614,11 +626,11 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
 
-            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'PV') : A}
-            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'GRID') : A}
+            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar') : A}
+            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid') : A}
             ${this.renderCore(snapshot, advanced)}
-            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'BAT', snapshot.battery.soc) : A}
-            ${this.renderNode(snapshot.home, 'bottom right', 'HOME')}
+            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', snapshot.battery.soc) : A}
+            ${this.renderNode(snapshot.home, 'bottom right', 'home')}
 
             ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : A}
             ${this._config.show_solar && this._config.show_battery
@@ -631,6 +643,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             ${this._config.show_battery ? this.renderFlow(snapshot.batteryToHome, snapshot.battery.accent, 'M 355 324 C 410 338, 455 334, 505 318') : A}
           </div>
 
+          ${advanced ? this.renderAdvancedRail(snapshot) : A}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : A}
         </section>
       </ha-card>
@@ -646,6 +659,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         ${advanced && snapshot.inverterStatus
             ? b `<div class="badge info">${snapshot.inverterStatus}</div>`
             : A}
+        ${advanced ? b `<div class="badge soft">${this.describeBatteryStatus(snapshot)}</div>` : A}
       </div>
     `;
     }
@@ -662,10 +676,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       </div>
     `;
     }
-    renderNode(node, position, shortLabel, soc) {
+    renderNode(node, position, iconName, soc) {
         return b `
       <article class="node ${position}" style=${`--accent:${node.accent};`}>
-        <div class="icon">${shortLabel}</div>
+        <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
           <strong>${formatPower(node.value, this._config.decimals ?? 1)}</strong>
@@ -674,6 +688,37 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         </div>
       </article>
     `;
+    }
+    renderIcon(iconName) {
+        const paths = {
+            solar: b `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"></path>
+        </svg>
+      `,
+            grid: b `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 4h8l3 5-7 11L5 9l3-5Z"></path>
+          <path d="M9 9h6M8 13h8M7 17h10"></path>
+        </svg>
+      `,
+            battery: b `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="7" width="14" height="10" rx="2"></rect>
+          <path d="M20 10v4"></path>
+          <path d="M7 12h6M10 9v6"></path>
+        </svg>
+      `,
+            home: b `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 11.5 12 5l8 6.5"></path>
+          <path d="M6.5 10.5V19h11v-8.5"></path>
+          <path d="M10 19v-5h4v5"></path>
+        </svg>
+      `,
+        };
+        return paths[iconName];
     }
     renderFlow(power, color, path) {
         const active = power > 0.05;
@@ -750,6 +795,27 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       </section>
     `;
     }
+    renderAdvancedRail(snapshot) {
+        return b `
+      <section class="advanced-rail">
+        <div class="rail-card">
+          <span>Tryb pracy</span>
+          <strong>${this.describeSystemBalance(snapshot)}</strong>
+          <small>${snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+        </div>
+        <div class="rail-card">
+          <span>Stan magazynu</span>
+          <strong>${this.describeBatteryStatus(snapshot)}</strong>
+          <small>${snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`}</small>
+        </div>
+        <div class="rail-card">
+          <span>Tryb polaczenia</span>
+          <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
+          <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
+        </div>
+      </section>
+    `;
+    }
     describeSystemBalance(snapshot) {
         if (snapshot.gridConnected === false) {
             return 'Praca off-grid';
@@ -767,6 +833,13 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             return 'Ladowanie magazynu';
         }
         return 'Przeplyw stabilny';
+    }
+    describeBatteryStatus(snapshot) {
+        if (snapshot.battery.mode === 'charging')
+            return 'Ladowanie';
+        if (snapshot.battery.mode === 'discharging')
+            return 'Rozladowanie';
+        return 'Stabilny bufor';
     }
 };
 ZsPowerFlowCard.styles = i$3 `
@@ -869,6 +942,10 @@ ZsPowerFlowCard.styles = i$3 `
       border-radius: 50%;
       background: #93c5fd;
       box-shadow: 0 0 10px currentColor;
+    }
+
+    .badge.soft {
+      background: rgba(255, 255, 255, 0.05);
     }
 
     .stage {
@@ -1028,11 +1105,23 @@ ZsPowerFlowCard.styles = i$3 `
       color: var(--accent);
       display: grid;
       place-items: center;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
       flex: 0 0 auto;
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+
+    .icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .icon svg circle,
+    .icon svg rect {
+      fill: none;
     }
 
     .meta {
@@ -1092,6 +1181,34 @@ ZsPowerFlowCard.styles = i$3 `
       display: grid;
       gap: 12px;
       margin-top: 16px;
+    }
+
+    .advanced-rail {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .rail-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .rail-card span,
+    .rail-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .rail-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.05rem;
     }
 
     .details.simple {
@@ -1181,6 +1298,10 @@ ZsPowerFlowCard.styles = i$3 `
       .details.advanced {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .advanced-rail {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -1242,6 +1363,10 @@ ZsPowerFlowCard.styles = i$3 `
 
       .details.advanced {
         grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .advanced-rail {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 

@@ -36,12 +36,12 @@ export class ZsPowerFlowCardEditor extends LitElement {
           </div>
 
           <div class="grid two">
-            ${this.renderEntityField('Produkcja PV', 'solar_entity', config.solar_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Moc sieci', 'grid_entity', config.grid_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Zuzycie domu', 'home_entity', config.home_entity ?? '', ['sensor'])}
-            ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh)}
+            ${this.renderEntityField('Produkcja PV', 'solar_entity', config.solar_entity ?? '', ['sensor'], 'Aktualna moc produkcji z paneli. Najczesciej sensor w W lub kW, np. laczna moc PV.')}
+            ${this.renderEntityField('Moc sieci', 'grid_entity', config.grid_entity ?? '', ['sensor'], 'Aktualna moc wymiany z siecia. Oczekiwane: plus = import, minus = eksport.')}
+            ${this.renderEntityField('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '', ['sensor'], 'Aktualna moc baterii. Oczekiwane: plus = rozladowanie do domu, minus = ladowanie.')}
+            ${this.renderEntityField('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '', ['sensor'], 'Procent naladowania baterii, najlepiej sensor 0-100.')}
+            ${this.renderEntityField('Zuzycie domu', 'home_entity', config.home_entity ?? '', ['sensor'], 'Calkowita aktualna moc odbiorow domu.')}
+            ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh, 'Sluzy do wyliczenia energii zgromadzonej w baterii na podstawie SOC.')}
           </div>
 
           <p class="hint">Konwencja tej wersji: siec plus = import, minus = eksport; bateria plus = rozladowanie, minus = ladowanie.</p>
@@ -57,21 +57,21 @@ export class ZsPowerFlowCardEditor extends LitElement {
             ${this.renderSelectField('Widok', 'view_mode', config.view_mode ?? 'simple', [
               ['simple', 'Simple'],
               ['advanced', 'Advanced'],
-            ])}
+            ], 'Simple pokazuje najwazniejsze dane, a advanced dodaje statusy i metryki dzienne.')}
             ${this.renderSelectField('Motyw', 'theme', config.theme ?? 'aurora', [
               ['aurora', 'Aurora'],
               ['graphite', 'Graphite'],
               ['sunset', 'Sunset'],
-            ])}
+            ], 'Zmienia palete kolorow i charakter wizualny karty.')}
             ${this.renderSelectField('Layout', 'layout', config.layout ?? 'balanced', [
               ['balanced', 'Balanced'],
               ['focus-home', 'Focus home'],
-            ])}
+            ], 'Balanced jest bardziej symetryczny, a Focus home bardziej eksponuje zuzycie domu.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
               ['summary', 'Summary'],
               ['extended', 'Extended'],
-            ])}
-            ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals)}
+            ], 'Extended pokazuje wiecej kart z przeplywami i energiami dziennymi.')}
+            ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals, 'Ile cyfr po przecinku pokazywac dla wartosci mocy.')}
           </div>
 
           <div class="toggle-grid">
@@ -91,14 +91,14 @@ export class ZsPowerFlowCardEditor extends LitElement {
           </div>
 
           <div class="grid two">
-            ${this.renderEntityField('Stan on/off-grid', 'grid_connected_entity', config.grid_connected_entity ?? '', ['binary_sensor', 'sensor'])}
-            ${this.renderEntityField('Status inwertera', 'inverter_status_entity', config.inverter_status_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Produkcja dzienna', 'daily_solar_energy_entity', config.daily_solar_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Zuzycie dzienne', 'daily_home_energy_entity', config.daily_home_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Import dzienny', 'daily_grid_import_energy_entity', config.daily_grid_import_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'])}
-            ${this.renderEntityField('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityField('Stan on/off-grid', 'grid_connected_entity', config.grid_connected_entity ?? '', ['binary_sensor', 'sensor'], 'Binary sensor lub sensor tekstowy wskazujacy, czy falownik pracuje z siecia. Obslugiwane m.in. on/off, connected/disconnected.')}
+            ${this.renderEntityField('Status inwertera', 'inverter_status_entity', config.inverter_status_entity ?? '', ['sensor'], 'Tekstowy status pracy inwertera, np. Normal, Fault, Standby.')}
+            ${this.renderEntityField('Produkcja dzienna', 'daily_solar_energy_entity', config.daily_solar_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia wyprodukowana przez PV, najlepiej w kWh.')}
+            ${this.renderEntityField('Zuzycie dzienne', 'daily_home_energy_entity', config.daily_home_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia zuzyta przez odbiory domu.')}
+            ${this.renderEntityField('Import dzienny', 'daily_grid_import_energy_entity', config.daily_grid_import_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia pobrana z sieci.')}
+            ${this.renderEntityField('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana do sieci.')}
+            ${this.renderEntityField('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia wlozona do baterii.')}
+            ${this.renderEntityField('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'], 'Dzisiejsza energia oddana z baterii.')}
           </div>
         </section>
 
@@ -132,7 +132,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
     `;
   }
 
-  private renderNumberField(label: string, key: keyof ZsPowerFlowCardConfig, value?: number) {
+  private renderNumberField(label: string, key: keyof ZsPowerFlowCardConfig, value?: number, helpText?: string) {
     return html`
       <label class="field">
         <span class="field-label">${label}</span>
@@ -145,6 +145,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
             this.updateConfig(key, next === '' ? undefined : Number(next));
           }}
         />
+        ${helpText ? html`<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
   }
@@ -154,6 +155,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
     key: keyof ZsPowerFlowCardConfig,
     value: string,
     includeDomains: string[],
+    helpText?: string,
   ) {
     const listId = `entities-${String(key)}`;
     const entityIds = this.getEntityIds(includeDomains);
@@ -166,11 +168,15 @@ export class ZsPowerFlowCardEditor extends LitElement {
           .value=${value}
           list=${listId}
           placeholder="sensor.twoja_encja"
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
           @input=${(event: Event) => this.updateConfig(key, (event.target as HTMLInputElement).value || undefined)}
         />
         <datalist id=${listId}>
           ${entityIds.map((entityId) => html`<option value=${entityId}></option>`)}
         </datalist>
+        ${helpText ? html`<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
   }
@@ -180,6 +186,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
     key: keyof ZsPowerFlowCardConfig,
     value: string,
     options: Array<[string, string]>,
+    helpText?: string,
   ) {
     return html`
       <label class="field">
@@ -191,6 +198,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
         >
           ${options.map(([optionValue, optionLabel]) => html`<option value=${optionValue}>${optionLabel}</option>`)}
         </select>
+        ${helpText ? html`<span class="helper">${helpText}</span>` : ''}
       </label>
     `;
   }
@@ -287,6 +295,12 @@ export class ZsPowerFlowCardEditor extends LitElement {
 
     .field-label {
       font-size: 0.85rem;
+      color: var(--secondary-text-color);
+    }
+
+    .helper {
+      font-size: 0.79rem;
+      line-height: 1.4;
       color: var(--secondary-text-color);
     }
 

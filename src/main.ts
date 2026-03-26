@@ -79,11 +79,11 @@ export class ZsPowerFlowCard extends LitElement {
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
 
-            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'PV') : nothing}
-            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'GRID') : nothing}
+            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar') : nothing}
+            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid') : nothing}
             ${this.renderCore(snapshot, advanced)}
-            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'BAT', snapshot.battery.soc) : nothing}
-            ${this.renderNode(snapshot.home, 'bottom right', 'HOME')}
+            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', snapshot.battery.soc) : nothing}
+            ${this.renderNode(snapshot.home, 'bottom right', 'home')}
 
             ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : nothing}
             ${this._config.show_solar && this._config.show_battery
@@ -96,6 +96,7 @@ export class ZsPowerFlowCard extends LitElement {
             ${this._config.show_battery ? this.renderFlow(snapshot.batteryToHome, snapshot.battery.accent, 'M 355 324 C 410 338, 455 334, 505 318') : nothing}
           </div>
 
+          ${advanced ? this.renderAdvancedRail(snapshot) : nothing}
           ${this._config.show_details ? this.renderDetails(snapshot, advanced) : nothing}
         </section>
       </ha-card>
@@ -112,6 +113,7 @@ export class ZsPowerFlowCard extends LitElement {
         ${advanced && snapshot.inverterStatus
           ? html`<div class="badge info">${snapshot.inverterStatus}</div>`
           : nothing}
+        ${advanced ? html`<div class="badge soft">${this.describeBatteryStatus(snapshot)}</div>` : nothing}
       </div>
     `;
   }
@@ -133,12 +135,12 @@ export class ZsPowerFlowCard extends LitElement {
   private renderNode(
     node: PowerFlowSnapshot['solar'] | PowerFlowSnapshot['grid'] | PowerFlowSnapshot['home'] | PowerFlowSnapshot['battery'],
     position: string,
-    shortLabel: string,
+    iconName: 'solar' | 'grid' | 'battery' | 'home',
     soc?: number | null,
   ) {
     return html`
       <article class="node ${position}" style=${`--accent:${node.accent};`}>
-        <div class="icon">${shortLabel}</div>
+        <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
           <strong>${formatPower(node.value, this._config.decimals ?? 1)}</strong>
@@ -147,6 +149,39 @@ export class ZsPowerFlowCard extends LitElement {
         </div>
       </article>
     `;
+  }
+
+  private renderIcon(iconName: 'solar' | 'grid' | 'battery' | 'home') {
+    const paths = {
+      solar: html`
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"></path>
+        </svg>
+      `,
+      grid: html`
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 4h8l3 5-7 11L5 9l3-5Z"></path>
+          <path d="M9 9h6M8 13h8M7 17h10"></path>
+        </svg>
+      `,
+      battery: html`
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="7" width="14" height="10" rx="2"></rect>
+          <path d="M20 10v4"></path>
+          <path d="M7 12h6M10 9v6"></path>
+        </svg>
+      `,
+      home: html`
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 11.5 12 5l8 6.5"></path>
+          <path d="M6.5 10.5V19h11v-8.5"></path>
+          <path d="M10 19v-5h4v5"></path>
+        </svg>
+      `,
+    };
+
+    return paths[iconName];
   }
 
   private renderFlow(power: number, color: string, path: string) {
@@ -229,6 +264,28 @@ export class ZsPowerFlowCard extends LitElement {
     `;
   }
 
+  private renderAdvancedRail(snapshot: PowerFlowSnapshot) {
+    return html`
+      <section class="advanced-rail">
+        <div class="rail-card">
+          <span>Tryb pracy</span>
+          <strong>${this.describeSystemBalance(snapshot)}</strong>
+          <small>${snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+        </div>
+        <div class="rail-card">
+          <span>Stan magazynu</span>
+          <strong>${this.describeBatteryStatus(snapshot)}</strong>
+          <small>${snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`}</small>
+        </div>
+        <div class="rail-card">
+          <span>Tryb polaczenia</span>
+          <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
+          <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
+        </div>
+      </section>
+    `;
+  }
+
   private describeSystemBalance(snapshot: PowerFlowSnapshot): string {
     if (snapshot.gridConnected === false) {
       return 'Praca off-grid';
@@ -246,6 +303,12 @@ export class ZsPowerFlowCard extends LitElement {
       return 'Ladowanie magazynu';
     }
     return 'Przeplyw stabilny';
+  }
+
+  private describeBatteryStatus(snapshot: PowerFlowSnapshot): string {
+    if (snapshot.battery.mode === 'charging') return 'Ladowanie';
+    if (snapshot.battery.mode === 'discharging') return 'Rozladowanie';
+    return 'Stabilny bufor';
   }
 
   static styles = css`
@@ -348,6 +411,10 @@ export class ZsPowerFlowCard extends LitElement {
       border-radius: 50%;
       background: #93c5fd;
       box-shadow: 0 0 10px currentColor;
+    }
+
+    .badge.soft {
+      background: rgba(255, 255, 255, 0.05);
     }
 
     .stage {
@@ -507,11 +574,23 @@ export class ZsPowerFlowCard extends LitElement {
       color: var(--accent);
       display: grid;
       place-items: center;
-      font-size: 0.78rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
       flex: 0 0 auto;
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+
+    .icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .icon svg circle,
+    .icon svg rect {
+      fill: none;
     }
 
     .meta {
@@ -571,6 +650,34 @@ export class ZsPowerFlowCard extends LitElement {
       display: grid;
       gap: 12px;
       margin-top: 16px;
+    }
+
+    .advanced-rail {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .rail-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .rail-card span,
+    .rail-card small {
+      display: block;
+      color: var(--zs-muted);
+    }
+
+    .rail-card strong {
+      display: block;
+      margin: 6px 0 4px;
+      font-size: 1.05rem;
     }
 
     .details.simple {
@@ -660,6 +767,10 @@ export class ZsPowerFlowCard extends LitElement {
       .details.advanced {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .advanced-rail {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (min-width: 1180px) {
@@ -721,6 +832,10 @@ export class ZsPowerFlowCard extends LitElement {
 
       .details.advanced {
         grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+
+      .advanced-rail {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 

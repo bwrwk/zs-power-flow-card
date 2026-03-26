@@ -4,6 +4,13 @@ export type DetailsMode = 'summary' | 'extended';
 export type ViewMode = 'simple' | 'advanced';
 export type VisualPreset = 'default' | 'compact' | 'analytics';
 export type FlowStyle = 'soft' | 'beam' | 'pulse';
+export type CardActionType = 'more-info' | 'navigate' | 'url' | 'none';
+
+export interface CardActionConfig {
+  action: CardActionType;
+  navigation_path?: string;
+  url_path?: string;
+}
 
 export interface HomeAssistantLike {
   states: Record<string, { state: string; attributes?: Record<string, unknown> }>;
@@ -63,6 +70,8 @@ export interface ZsPowerFlowCardConfig {
   invert_battery?: boolean;
   power_noise_floor_w?: number;
   decimals?: number;
+  tap_action?: CardActionConfig;
+  hold_action?: CardActionConfig;
   solar_label?: string;
   grid_label?: string;
   battery_label?: string;

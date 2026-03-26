@@ -1,8 +1,14 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { ZsPowerFlowCardConfig } from './types';
+import { CardActionConfig, CardActionType, ZsPowerFlowCardConfig } from './types';
 
-type HassStateMap = Record<string, { entity_id?: string }>;
+type HassEntityState = {
+  entity_id?: string;
+  state?: string;
+  attributes?: Record<string, unknown>;
+};
+
+type HassStateMap = Record<string, HassEntityState>;
 
 type HomeAssistantEditor = {
   states: HassStateMap;
@@ -25,6 +31,9 @@ export class ZsPowerFlowCardEditor extends LitElement {
 
     return html`
       <div class="form">
+        ${this.renderRecommendationSection(config)}
+        ${this.renderValidationSection(config)}
+
         <section class="section">
           <div class="section-header">
             <h4>Podstawy</h4>
@@ -101,6 +110,18 @@ export class ZsPowerFlowCardEditor extends LitElement {
 
         <section class="section">
           <div class="section-header">
+            <h4>Akcje</h4>
+            <p>Co ma sie stac po kliknieciu lub przytrzymaniu glownego bloku PV, sieci, baterii i domu.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderActionTypeField('Klikniecie', 'tap_action', config.tap_action, 'Domyslnie otwiera more-info dla kliknietej encji.')}
+            ${this.renderActionTypeField('Przytrzymanie', 'hold_action', config.hold_action, 'Moze otwierac more-info, przechodzic do widoku albo otwierac URL.')}
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
             <h4>Status i metryki zaawansowane</h4>
             <p>Opcjonalne pola dla widoku advanced. Jesli ich nie ustawisz, karta nadal bedzie dzialac.</p>
           </div>
@@ -150,6 +171,68 @@ export class ZsPowerFlowCardEditor extends LitElement {
           </div>
         </section>
       </div>
+    `;
+  }
+
+  private renderRecommendationSection(config: ZsPowerFlowCardConfig) {
+    const recommendations = this.getRecommendations().filter(({ key, value }) => value && config[key] !== value);
+    if (recommendations.length === 0) return html``;
+
+    return html`
+      <section class="section accent">
+        <div class="section-header">
+          <h4>Rekomendowane mapowanie</h4>
+          <p>Znalazlem encje, ktore wygladaja na dobre kandydaty. Mozesz je wstawic jednym kliknieciem.</p>
+        </div>
+
+        <div class="recommendation-list">
+          ${recommendations.map(
+            ({ label, key, value, reason }) => html`
+              <button type="button" class="recommendation" @click=${() => this.updateConfig(key, value)}>
+                <strong>${label}</strong>
+                <span>${value}</span>
+                <small>${reason}</small>
+              </button>
+            `,
+          )}
+        </div>
+      </section>
+    `;
+  }
+
+  private renderValidationSection(config: ZsPowerFlowCardConfig) {
+    const issues: string[] = [];
+    const required = [
+      ['solar_entity', 'Produkcja PV'],
+      ['grid_entity', 'Moc sieci'],
+      ['battery_power_entity', 'Moc baterii'],
+      ['battery_soc_entity', 'SOC baterii'],
+      ['home_entity', 'Zuzycie domu'],
+    ] as const;
+
+    required.forEach(([key, label]) => {
+      if (!config[key]) issues.push(`Brakuje pola: ${label}.`);
+    });
+
+    const coreValues = [config.solar_entity, config.grid_entity, config.battery_power_entity, config.battery_soc_entity, config.home_entity]
+      .filter((value): value is string => Boolean(value));
+    const duplicates = coreValues.filter((value, index) => coreValues.indexOf(value) !== index);
+    if (duplicates.length > 0) {
+      issues.push(`Te same encje sa uzyte wielokrotnie: ${Array.from(new Set(duplicates)).join(', ')}.`);
+    }
+
+    if (issues.length === 0) return html``;
+
+    return html`
+      <section class="section warning">
+        <div class="section-header">
+          <h4>Kontrola konfiguracji</h4>
+          <p>To nie blokuje karty, ale warto to sprawdzic przed zapisaniem.</p>
+        </div>
+        <div class="validation-list">
+          ${issues.map((issue) => html`<div class="validation-item">${issue}</div>`)}
+        </div>
+      </section>
     `;
   }
 
@@ -240,6 +323,59 @@ export class ZsPowerFlowCardEditor extends LitElement {
     `;
   }
 
+  private renderActionTypeField(
+    label: string,
+    key: 'tap_action' | 'hold_action',
+    value: CardActionConfig | undefined,
+    helpText?: string,
+  ) {
+    const action = value?.action ?? 'more-info';
+    return html`
+      <div class="field action-group">
+        <span class="field-label">${label}</span>
+        <select
+          class="text-input"
+          .value=${action}
+          @change=${(event: Event) => this.updateActionConfig(key, { action: (event.target as HTMLSelectElement).value as CardActionType })}
+        >
+          <option value="more-info" ?selected=${action === 'more-info'}>More info</option>
+          <option value="navigate" ?selected=${action === 'navigate'}>Navigate</option>
+          <option value="url" ?selected=${action === 'url'}>Open URL</option>
+          <option value="none" ?selected=${action === 'none'}>None</option>
+        </select>
+        ${action === 'navigate'
+          ? html`
+              <input
+                class="text-input"
+                .value=${value?.navigation_path ?? ''}
+                placeholder="/lovelace/energia"
+                @input=${(event: Event) =>
+                  this.updateActionConfig(key, {
+                    action: 'navigate',
+                    navigation_path: (event.target as HTMLInputElement).value || undefined,
+                  })}
+              />
+            `
+          : ''}
+        ${action === 'url'
+          ? html`
+              <input
+                class="text-input"
+                .value=${value?.url_path ?? ''}
+                placeholder="https://example.com"
+                @input=${(event: Event) =>
+                  this.updateActionConfig(key, {
+                    action: 'url',
+                    url_path: (event.target as HTMLInputElement).value || undefined,
+                  })}
+              />
+            `
+          : ''}
+        ${helpText ? html`<span class="helper">${helpText}</span>` : ''}
+      </div>
+    `;
+  }
+
   private renderToggleTile(label: string, key: keyof ZsPowerFlowCardConfig, value: boolean) {
     return html`
       <label class="toggle-tile">
@@ -260,6 +396,63 @@ export class ZsPowerFlowCardEditor extends LitElement {
       .sort((a, b) => a.localeCompare(b));
   }
 
+  private getRecommendations() {
+    return [
+      this.makeRecommendation('Produkcja PV', 'solar_entity', ['pv power', 'pv_power', 'solar power', 'solar_power', 'production']),
+      this.makeRecommendation('Moc sieci', 'grid_entity', ['grid power', 'grid_power', 'import power', 'external power', 'internal power']),
+      this.makeRecommendation('Moc baterii', 'battery_power_entity', ['battery power', 'battery_power']),
+      this.makeRecommendation('SOC baterii', 'battery_soc_entity', ['battery', 'battery soc'], ['battery']),
+      this.makeRecommendation('Zuzycie domu', 'home_entity', ['load power', 'load_power', 'home load', 'consumption']),
+      this.makeRecommendation('Stan on/off-grid', 'grid_connected_entity', ['grid'], ['binary_sensor']),
+      this.makeRecommendation('Status inwertera', 'inverter_status_entity', ['device state', 'inverter status', 'status']),
+    ].filter((item): item is { label: string; key: keyof ZsPowerFlowCardConfig; value: string; reason: string } => Boolean(item));
+  }
+
+  private makeRecommendation(
+    label: string,
+    key: keyof ZsPowerFlowCardConfig,
+    phrases: string[],
+    includeDomains = ['sensor', 'binary_sensor'],
+  ) {
+    const candidate = this.findBestEntity(phrases, includeDomains);
+    if (!candidate) return null;
+    return {
+      label,
+      key,
+      value: candidate.entityId,
+      reason: candidate.reason,
+    };
+  }
+
+  private findBestEntity(phrases: string[], includeDomains: string[]) {
+    const entries = Object.entries(this.hass?.states ?? {})
+      .filter(([entityId]) => includeDomains.includes(entityId.split('.')[0]))
+      .map(([entityId, state]) => {
+        const friendlyName = typeof state.attributes?.friendly_name === 'string' ? state.attributes.friendly_name : '';
+        const haystack = `${entityId} ${friendlyName}`.toLowerCase();
+        let score = 0;
+        const matched: string[] = [];
+
+        phrases.forEach((phrase) => {
+          if (haystack.includes(phrase)) {
+            score += phrase.length;
+            matched.push(phrase);
+          }
+        });
+
+        if (score === 0) return null;
+        return {
+          entityId,
+          score,
+          reason: `Dopasowanie po: ${matched.join(', ')}`,
+        };
+      })
+      .filter((entry): entry is { entityId: string; score: number; reason: string } => Boolean(entry))
+      .sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId));
+
+    return entries[0];
+  }
+
   private updateConfig(key: keyof ZsPowerFlowCardConfig, value: unknown) {
     const nextConfig: ZsPowerFlowCardConfig = {
       ...this._config,
@@ -274,6 +467,14 @@ export class ZsPowerFlowCardEditor extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  private updateActionConfig(key: 'tap_action' | 'hold_action', patch: CardActionConfig) {
+    const previous = this._config?.[key];
+    this.updateConfig(key, {
+      ...previous,
+      ...patch,
+    });
   }
 
   static styles = css`
@@ -297,6 +498,16 @@ export class ZsPowerFlowCardEditor extends LitElement {
         var(--card-background-color);
       border: 1px solid var(--divider-color);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+    }
+
+    .section.accent {
+      border-color: rgba(59, 130, 246, 0.22);
+      box-shadow: 0 12px 34px rgba(59, 130, 246, 0.08);
+    }
+
+    .section.warning {
+      border-color: rgba(245, 158, 11, 0.22);
+      box-shadow: 0 12px 34px rgba(245, 158, 11, 0.08);
     }
 
     .section-header h4 {
@@ -341,6 +552,49 @@ export class ZsPowerFlowCardEditor extends LitElement {
       color: var(--secondary-text-color);
     }
 
+    .recommendation-list,
+    .validation-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recommendation {
+      display: grid;
+      gap: 2px;
+      text-align: left;
+      border: 1px solid rgba(59, 130, 246, 0.18);
+      background: linear-gradient(180deg, rgba(239,246,255,0.95), rgba(219,234,254,0.84));
+      border-radius: 14px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .recommendation:hover {
+      transform: translateY(-1px);
+      border-color: rgba(59, 130, 246, 0.3);
+      box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+    }
+
+    .recommendation strong {
+      font-size: 0.92rem;
+    }
+
+    .recommendation span,
+    .recommendation small,
+    .validation-item {
+      color: var(--secondary-text-color);
+    }
+
+    .validation-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.12);
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
     .text-input {
       width: 100%;
       box-sizing: border-box;
@@ -364,6 +618,10 @@ export class ZsPowerFlowCardEditor extends LitElement {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    .action-group {
+      align-content: start;
     }
 
     .toggle-tile {

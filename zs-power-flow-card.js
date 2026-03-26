@@ -96,6 +96,9 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
         }
         return b `
       <div class="form">
+        ${this.renderRecommendationSection(config)}
+        ${this.renderValidationSection(config)}
+
         <section class="section">
           <div class="section-header">
             <h4>Podstawy</h4>
@@ -172,6 +175,18 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
 
         <section class="section">
           <div class="section-header">
+            <h4>Akcje</h4>
+            <p>Co ma sie stac po kliknieciu lub przytrzymaniu glownego bloku PV, sieci, baterii i domu.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderActionTypeField('Klikniecie', 'tap_action', config.tap_action, 'Domyslnie otwiera more-info dla kliknietej encji.')}
+            ${this.renderActionTypeField('Przytrzymanie', 'hold_action', config.hold_action, 'Moze otwierac more-info, przechodzic do widoku albo otwierac URL.')}
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">
             <h4>Status i metryki zaawansowane</h4>
             <p>Opcjonalne pola dla widoku advanced. Jesli ich nie ustawisz, karta nadal bedzie dzialac.</p>
           </div>
@@ -221,6 +236,62 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
           </div>
         </section>
       </div>
+    `;
+    }
+    renderRecommendationSection(config) {
+        const recommendations = this.getRecommendations().filter(({ key, value }) => value && config[key] !== value);
+        if (recommendations.length === 0)
+            return b ``;
+        return b `
+      <section class="section accent">
+        <div class="section-header">
+          <h4>Rekomendowane mapowanie</h4>
+          <p>Znalazlem encje, ktore wygladaja na dobre kandydaty. Mozesz je wstawic jednym kliknieciem.</p>
+        </div>
+
+        <div class="recommendation-list">
+          ${recommendations.map(({ label, key, value, reason }) => b `
+              <button type="button" class="recommendation" @click=${() => this.updateConfig(key, value)}>
+                <strong>${label}</strong>
+                <span>${value}</span>
+                <small>${reason}</small>
+              </button>
+            `)}
+        </div>
+      </section>
+    `;
+    }
+    renderValidationSection(config) {
+        const issues = [];
+        const required = [
+            ['solar_entity', 'Produkcja PV'],
+            ['grid_entity', 'Moc sieci'],
+            ['battery_power_entity', 'Moc baterii'],
+            ['battery_soc_entity', 'SOC baterii'],
+            ['home_entity', 'Zuzycie domu'],
+        ];
+        required.forEach(([key, label]) => {
+            if (!config[key])
+                issues.push(`Brakuje pola: ${label}.`);
+        });
+        const coreValues = [config.solar_entity, config.grid_entity, config.battery_power_entity, config.battery_soc_entity, config.home_entity]
+            .filter((value) => Boolean(value));
+        const duplicates = coreValues.filter((value, index) => coreValues.indexOf(value) !== index);
+        if (duplicates.length > 0) {
+            issues.push(`Te same encje sa uzyte wielokrotnie: ${Array.from(new Set(duplicates)).join(', ')}.`);
+        }
+        if (issues.length === 0)
+            return b ``;
+        return b `
+      <section class="section warning">
+        <div class="section-header">
+          <h4>Kontrola konfiguracji</h4>
+          <p>To nie blokuje karty, ale warto to sprawdzic przed zapisaniem.</p>
+        </div>
+        <div class="validation-list">
+          ${issues.map((issue) => b `<div class="validation-item">${issue}</div>`)}
+        </div>
+      </section>
     `;
     }
     renderTextField(label, key, value) {
@@ -290,6 +361,51 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
       </label>
     `;
     }
+    renderActionTypeField(label, key, value, helpText) {
+        const action = value?.action ?? 'more-info';
+        return b `
+      <div class="field action-group">
+        <span class="field-label">${label}</span>
+        <select
+          class="text-input"
+          .value=${action}
+          @change=${(event) => this.updateActionConfig(key, { action: event.target.value })}
+        >
+          <option value="more-info" ?selected=${action === 'more-info'}>More info</option>
+          <option value="navigate" ?selected=${action === 'navigate'}>Navigate</option>
+          <option value="url" ?selected=${action === 'url'}>Open URL</option>
+          <option value="none" ?selected=${action === 'none'}>None</option>
+        </select>
+        ${action === 'navigate'
+            ? b `
+              <input
+                class="text-input"
+                .value=${value?.navigation_path ?? ''}
+                placeholder="/lovelace/energia"
+                @input=${(event) => this.updateActionConfig(key, {
+                action: 'navigate',
+                navigation_path: event.target.value || undefined,
+            })}
+              />
+            `
+            : ''}
+        ${action === 'url'
+            ? b `
+              <input
+                class="text-input"
+                .value=${value?.url_path ?? ''}
+                placeholder="https://example.com"
+                @input=${(event) => this.updateActionConfig(key, {
+                action: 'url',
+                url_path: event.target.value || undefined,
+            })}
+              />
+            `
+            : ''}
+        ${helpText ? b `<span class="helper">${helpText}</span>` : ''}
+      </div>
+    `;
+    }
     renderToggleTile(label, key, value) {
         return b `
       <label class="toggle-tile">
@@ -308,6 +424,54 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             .filter((entityId) => includeDomains.includes(entityId.split('.')[0]))
             .sort((a, b) => a.localeCompare(b));
     }
+    getRecommendations() {
+        return [
+            this.makeRecommendation('Produkcja PV', 'solar_entity', ['pv power', 'pv_power', 'solar power', 'solar_power', 'production']),
+            this.makeRecommendation('Moc sieci', 'grid_entity', ['grid power', 'grid_power', 'import power', 'external power', 'internal power']),
+            this.makeRecommendation('Moc baterii', 'battery_power_entity', ['battery power', 'battery_power']),
+            this.makeRecommendation('SOC baterii', 'battery_soc_entity', ['battery', 'battery soc'], ['battery']),
+            this.makeRecommendation('Zuzycie domu', 'home_entity', ['load power', 'load_power', 'home load', 'consumption']),
+            this.makeRecommendation('Stan on/off-grid', 'grid_connected_entity', ['grid'], ['binary_sensor']),
+            this.makeRecommendation('Status inwertera', 'inverter_status_entity', ['device state', 'inverter status', 'status']),
+        ].filter((item) => Boolean(item));
+    }
+    makeRecommendation(label, key, phrases, includeDomains = ['sensor', 'binary_sensor']) {
+        const candidate = this.findBestEntity(phrases, includeDomains);
+        if (!candidate)
+            return null;
+        return {
+            label,
+            key,
+            value: candidate.entityId,
+            reason: candidate.reason,
+        };
+    }
+    findBestEntity(phrases, includeDomains) {
+        const entries = Object.entries(this.hass?.states ?? {})
+            .filter(([entityId]) => includeDomains.includes(entityId.split('.')[0]))
+            .map(([entityId, state]) => {
+            const friendlyName = typeof state.attributes?.friendly_name === 'string' ? state.attributes.friendly_name : '';
+            const haystack = `${entityId} ${friendlyName}`.toLowerCase();
+            let score = 0;
+            const matched = [];
+            phrases.forEach((phrase) => {
+                if (haystack.includes(phrase)) {
+                    score += phrase.length;
+                    matched.push(phrase);
+                }
+            });
+            if (score === 0)
+                return null;
+            return {
+                entityId,
+                score,
+                reason: `Dopasowanie po: ${matched.join(', ')}`,
+            };
+        })
+            .filter((entry) => Boolean(entry))
+            .sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId));
+        return entries[0];
+    }
     updateConfig(key, value) {
         const nextConfig = {
             ...this._config,
@@ -319,6 +483,13 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             bubbles: true,
             composed: true,
         }));
+    }
+    updateActionConfig(key, patch) {
+        const previous = this._config?.[key];
+        this.updateConfig(key, {
+            ...previous,
+            ...patch,
+        });
     }
 };
 ZsPowerFlowCardEditor.styles = i$3 `
@@ -342,6 +513,16 @@ ZsPowerFlowCardEditor.styles = i$3 `
         var(--card-background-color);
       border: 1px solid var(--divider-color);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+    }
+
+    .section.accent {
+      border-color: rgba(59, 130, 246, 0.22);
+      box-shadow: 0 12px 34px rgba(59, 130, 246, 0.08);
+    }
+
+    .section.warning {
+      border-color: rgba(245, 158, 11, 0.22);
+      box-shadow: 0 12px 34px rgba(245, 158, 11, 0.08);
     }
 
     .section-header h4 {
@@ -386,6 +567,49 @@ ZsPowerFlowCardEditor.styles = i$3 `
       color: var(--secondary-text-color);
     }
 
+    .recommendation-list,
+    .validation-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .recommendation {
+      display: grid;
+      gap: 2px;
+      text-align: left;
+      border: 1px solid rgba(59, 130, 246, 0.18);
+      background: linear-gradient(180deg, rgba(239,246,255,0.95), rgba(219,234,254,0.84));
+      border-radius: 14px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .recommendation:hover {
+      transform: translateY(-1px);
+      border-color: rgba(59, 130, 246, 0.3);
+      box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+    }
+
+    .recommendation strong {
+      font-size: 0.92rem;
+    }
+
+    .recommendation span,
+    .recommendation small,
+    .validation-item {
+      color: var(--secondary-text-color);
+    }
+
+    .validation-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.12);
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
     .text-input {
       width: 100%;
       box-sizing: border-box;
@@ -409,6 +633,10 @@ ZsPowerFlowCardEditor.styles = i$3 `
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    .action-group {
+      align-content: start;
     }
 
     .toggle-tile {
@@ -784,6 +1012,13 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         };
         this._stageSize = { width: 640, height: 420 };
         this._flowFrame = 0;
+        this._holdTriggered = false;
+        this.handlePointerUp = () => {
+            this.clearHoldTimer();
+        };
+        this.handlePointerLeave = () => {
+            this.clearHoldTimer();
+        };
     }
     static getConfigElement() {
         return document.createElement('zs-power-flow-card-editor');
@@ -808,6 +1043,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         this._resizeObserver?.disconnect();
         this._resizeObserver = undefined;
         cancelAnimationFrame(this._flowFrame);
+        this.clearHoldTimer();
         super.disconnectedCallback();
     }
     firstUpdated() {
@@ -894,6 +1130,8 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     `;
     }
     renderStatusRail(snapshot, advanced) {
+        const inverterTone = this.getStatusTone(snapshot.inverterStatus);
+        const deviceTone = this.getStatusTone(snapshot.deviceAlarm, snapshot.deviceFault);
         return b `
       <div class="status-rail">
         <div class=${`badge ${snapshot.gridConnected === false ? 'warn' : 'ok'}`}>
@@ -901,9 +1139,12 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           ${snapshot.gridConnected === null ? 'Stan sieci nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}
         </div>
         ${advanced && snapshot.inverterStatus
-            ? b `<div class="badge info">${snapshot.inverterStatus}</div>`
+            ? b `<div class=${`badge info ${inverterTone}`.trim()}>${snapshot.inverterStatus}</div>`
             : A}
         ${advanced ? b `<div class="badge soft">${this.describeBatteryStatus(snapshot)}</div>` : A}
+        ${advanced && snapshot.deviceAlarm
+            ? b `<div class=${`badge ${deviceTone}`.trim()}>${snapshot.deviceAlarm}</div>`
+            : A}
       </div>
     `;
     }
@@ -929,7 +1170,11 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       <article
         class=${`node ${position} ${entityId ? 'clickable' : ''}`}
         style=${`--accent:${node.accent};`}
-        @click=${() => this.showMoreInfo(entityId)}
+        @click=${() => this.handleTap(entityId)}
+        @pointerdown=${() => this.handlePointerDown(entityId)}
+        @pointerup=${this.handlePointerUp}
+        @pointerleave=${this.handlePointerLeave}
+        @pointercancel=${this.handlePointerLeave}
       >
         <span class=${`flow-anchor node-anchor ${iconName}`}></span>
         <div class="icon">${this.renderIcon(iconName)}</div>
@@ -1109,6 +1354,14 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (!advanced) {
             return b `<section class="details simple">${baseCards}</section>`;
         }
+        const residualCard = snapshot.residualPower > 0
+            ? b `
+            <div class="detail-card warn">
+              <span>${this.describeResidualLabel(snapshot)}</span>
+              <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
+            </div>
+          `
+            : A;
         return b `
       <section class="details advanced">
         ${baseCards}
@@ -1124,10 +1377,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <span>Bateria do sieci</span>
           <strong>${formatPower(snapshot.batteryToGrid, this._config.decimals ?? 1)}</strong>
         </div>
-        <div class="detail-card ${snapshot.residualPower > 0 ? 'warn' : ''}">
-          <span>${this.describeResidualLabel(snapshot)}</span>
-          <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
-        </div>
+        ${residualCard}
         <div class="detail-card metric">
           <span>Dzienna produkcja</span>
           <strong>${formatKwh(snapshot.dailyEnergy.solar, 1)}</strong>
@@ -1207,6 +1457,8 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     `;
     }
     renderHealthRail(snapshot) {
+        const deviceTone = this.getStatusTone(snapshot.deviceAlarm, snapshot.deviceFault);
+        const batteryTone = snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn';
         return b `
       <section class="health-rail">
         <div class="health-card">
@@ -1219,12 +1471,12 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <strong>${snapshot.inverterTemperature === null ? '--' : `${snapshot.inverterTemperature.toFixed(0)}°C`}</strong>
           <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
         </div>
-        <div class="health-card ${this.isHealthy(snapshot.deviceAlarm) ? '' : 'warn'}">
+        <div class=${`health-card ${deviceTone}`.trim()}>
           <span>Alarm urzadzenia</span>
           <strong>${snapshot.deviceAlarm ?? '--'}</strong>
           <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
         </div>
-        <div class="health-card ${snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn'}">
+        <div class=${`health-card ${batteryTone}`.trim()}>
           <span>Alarm baterii</span>
           <strong>${this.describeBinaryHealth(snapshot.batteryAlarm)}</strong>
           <small>Fault: ${this.describeBinaryHealth(snapshot.batteryFault)}</small>
@@ -1271,6 +1523,42 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         }
         return 'Bilans pozostaly';
     }
+    handleTap(entityId) {
+        if (this._holdTriggered) {
+            this._holdTriggered = false;
+            return;
+        }
+        this.fireConfiguredAction(this._config.tap_action, entityId);
+    }
+    handlePointerDown(entityId) {
+        this.clearHoldTimer();
+        this._holdTriggered = false;
+        this._holdTimer = window.setTimeout(() => {
+            this._holdTriggered = true;
+            this.fireConfiguredAction(this._config.hold_action, entityId);
+        }, 450);
+    }
+    clearHoldTimer() {
+        if (this._holdTimer !== undefined) {
+            window.clearTimeout(this._holdTimer);
+            this._holdTimer = undefined;
+        }
+    }
+    fireConfiguredAction(actionConfig, entityId) {
+        const action = actionConfig?.action ?? 'more-info';
+        if (action === 'none')
+            return;
+        if (action === 'navigate' && actionConfig?.navigation_path) {
+            window.history.pushState(null, '', actionConfig.navigation_path);
+            window.dispatchEvent(new Event('location-changed'));
+            return;
+        }
+        if (action === 'url' && actionConfig?.url_path) {
+            window.open(actionConfig.url_path, '_blank', 'noopener');
+            return;
+        }
+        this.showMoreInfo(entityId);
+    }
     showMoreInfo(entityId) {
         if (!entityId || !this.hass)
             return;
@@ -1284,6 +1572,21 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (!value)
             return true;
         return ['ok', 'normal', 'none', 'idle'].includes(value.toLowerCase());
+    }
+    getStatusTone(...values) {
+        const normalized = values
+            .filter((value) => Boolean(value))
+            .map((value) => value.toLowerCase());
+        if (normalized.some((value) => value.includes('fault') || value.includes('alarm') || value.includes('error'))) {
+            return 'warn';
+        }
+        if (normalized.some((value) => value.includes('warn') || value.includes('offline'))) {
+            return 'caution';
+        }
+        if (normalized.some((value) => value.includes('normal') || value.includes('ok') || value.includes('idle'))) {
+            return 'ok';
+        }
+        return '';
     }
     describeBinaryHealth(value) {
         if (value === null)
@@ -1385,6 +1688,10 @@ ZsPowerFlowCard.styles = i$3 `
       background: #fca5a5;
     }
 
+    .badge.caution .badge-dot {
+      background: #fcd34d;
+    }
+
     .badge-dot {
       width: 8px;
       height: 8px;
@@ -1395,6 +1702,20 @@ ZsPowerFlowCard.styles = i$3 `
 
     .badge.soft {
       background: rgba(255, 255, 255, 0.05);
+    }
+
+    .badge.warn {
+      border-color: rgba(248, 113, 113, 0.28);
+      color: #ffe4e6;
+    }
+
+    .badge.caution {
+      border-color: rgba(251, 191, 36, 0.28);
+      color: #fef3c7;
+    }
+
+    .badge.ok {
+      border-color: rgba(134, 239, 172, 0.22);
     }
 
     .stage {
@@ -1753,7 +2074,7 @@ ZsPowerFlowCard.styles = i$3 `
 
     .breakdown-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
       margin-top: 12px;
     }
@@ -1803,14 +2124,14 @@ ZsPowerFlowCard.styles = i$3 `
 
     .advanced-rail {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
       margin-top: 16px;
     }
 
     .health-rail {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
       margin-top: 12px;
     }
@@ -1838,6 +2159,11 @@ ZsPowerFlowCard.styles = i$3 `
       box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
     }
 
+    .health-card.caution {
+      border-color: rgba(251, 191, 36, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.08);
+    }
+
     .health-card span,
     .health-card small {
       display: block;
@@ -1863,11 +2189,11 @@ ZsPowerFlowCard.styles = i$3 `
     }
 
     .details.simple {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
     .details.advanced {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       align-items: start;
     }
 
@@ -1971,14 +2297,8 @@ ZsPowerFlowCard.styles = i$3 `
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .advanced-rail {
-        grid-template-columns: 1fr;
-      }
-
-      .health-rail {
-        grid-template-columns: 1fr;
-      }
-
+      .advanced-rail,
+      .health-rail,
       .breakdown-grid {
         grid-template-columns: 1fr;
       }
@@ -2042,7 +2362,7 @@ ZsPowerFlowCard.styles = i$3 `
       }
 
       .details.advanced {
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
 
       .detail-card {
@@ -2057,16 +2377,10 @@ ZsPowerFlowCard.styles = i$3 `
         font-size: 1.36rem;
       }
 
-      .advanced-rail {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .health-rail {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
-
+      .advanced-rail,
+      .health-rail,
       .breakdown-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
     }
 

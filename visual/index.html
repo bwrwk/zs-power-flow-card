@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ZS Power Flow Visual Harness</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "Segoe UI", sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      .page {
+        display: grid;
+        gap: 24px;
+      }
+
+      .scenario {
+        display: grid;
+        gap: 14px;
+      }
+
+      .scenario-copy {
+        display: grid;
+        gap: 6px;
+      }
+
+      .preview-row {
+        display: grid;
+        gap: 16px;
+      }
+
+      .frame {
+        border-radius: 24px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .frame-label {
+        font-size: 0.82rem;
+        color: #94a3b8;
+        margin-bottom: 10px;
+      }
+
+      .width-narrow {
+        max-width: 760px;
+      }
+
+      .width-regular {
+        max-width: 1080px;
+      }
+
+      .width-wide {
+        max-width: 1480px;
+      }
+    </style>
+    <script type="module" src="../zs-power-flow-card.js"></script>
+  </head>
+  <body>
+    <div class="page" id="page"></div>
+    <script type="module">
+      const baseConfig = {
+        type: 'custom:zs-power-flow-card',
+        title: 'Visual Harness',
+        view_mode: 'advanced',
+        theme: 'sunset',
+        layout: 'balanced',
+        details_mode: 'extended',
+        show_details: true,
+        show_status_bar: true,
+        show_phase_breakdown: true,
+        show_pv_breakdown: true,
+        animation_enabled: true,
+        solar_entity: 'sensor.pv_power',
+        grid_entity: 'sensor.grid_power',
+        battery_power_entity: 'sensor.battery_power',
+        battery_soc_entity: 'sensor.battery_soc',
+        home_entity: 'sensor.home_load',
+        grid_connected_entity: 'binary_sensor.grid_connected',
+        inverter_status_entity: 'sensor.inverter_status',
+        battery_state_entity: 'sensor.battery_state',
+        battery_soh_entity: 'sensor.battery_soh',
+        battery_temperature_entity: 'sensor.battery_temperature',
+        inverter_temperature_entity: 'sensor.inverter_temperature',
+        device_alarm_entity: 'sensor.device_alarm',
+        device_fault_entity: 'sensor.device_fault',
+        daily_solar_energy_entity: 'sensor.daily_solar',
+        daily_home_energy_entity: 'sensor.daily_home',
+        daily_grid_import_energy_entity: 'sensor.daily_import',
+        daily_grid_export_energy_entity: 'sensor.daily_export',
+        daily_battery_charge_energy_entity: 'sensor.daily_charge',
+        daily_battery_discharge_energy_entity: 'sensor.daily_discharge',
+        pv1_power_entity: 'sensor.pv1_power',
+        pv2_power_entity: 'sensor.pv2_power',
+        load_l1_power_entity: 'sensor.load_l1_power',
+        load_l2_power_entity: 'sensor.load_l2_power',
+        load_l3_power_entity: 'sensor.load_l3_power',
+        grid_l1_power_entity: 'sensor.grid_l1_power',
+        grid_l2_power_entity: 'sensor.grid_l2_power',
+        grid_l3_power_entity: 'sensor.grid_l3_power',
+        battery_capacity_kwh: 16,
+      };
+
+      const scenarios = [
+        {
+          name: 'Grid support',
+          description: 'Import z sieci z lekkim obciazeniem i malym szumem baterii.',
+          states: {
+            'sensor.pv_power': { state: '0', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_power': { state: '773', attributes: { unit_of_measurement: 'W' } },
+            'sensor.battery_power': { state: '14', attributes: { unit_of_measurement: 'W' } },
+            'sensor.battery_soc': { state: '15' },
+            'sensor.home_load': { state: '639', attributes: { unit_of_measurement: 'W' } },
+            'binary_sensor.grid_connected': { state: 'on' },
+            'sensor.inverter_status': { state: 'Normal' },
+            'sensor.battery_state': { state: 'idle' },
+            'sensor.battery_soh': { state: '99.8' },
+            'sensor.battery_temperature': { state: '18' },
+            'sensor.inverter_temperature': { state: '24' },
+            'sensor.device_alarm': { state: 'OK' },
+            'sensor.device_fault': { state: 'OK' },
+            'sensor.daily_solar': { state: '0.8', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_home': { state: '14.1', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_import': { state: '13.4', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_export': { state: '0', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_charge': { state: '0', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_discharge': { state: '2.1', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.pv1_power': { state: '0', attributes: { unit_of_measurement: 'W' } },
+            'sensor.pv2_power': { state: '0', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l1_power': { state: '130', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l2_power': { state: '380', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l3_power': { state: '129', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l1_power': { state: '220', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l2_power': { state: '300', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l3_power': { state: '253', attributes: { unit_of_measurement: 'W' } },
+          },
+        },
+        {
+          name: 'Solar surplus',
+          description: 'Wiecej PV, ladowanie baterii i eksport do sieci.',
+          states: {
+            'sensor.pv_power': { state: '6200', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_power': { state: '-1000', attributes: { unit_of_measurement: 'W' } },
+            'sensor.battery_power': { state: '-1400', attributes: { unit_of_measurement: 'W' } },
+            'sensor.battery_soc': { state: '80' },
+            'sensor.home_load': { state: '3800', attributes: { unit_of_measurement: 'W' } },
+            'binary_sensor.grid_connected': { state: 'on' },
+            'sensor.inverter_status': { state: 'Normal' },
+            'sensor.battery_state': { state: 'charging' },
+            'sensor.battery_soh': { state: '99.8' },
+            'sensor.battery_temperature': { state: '21' },
+            'sensor.inverter_temperature': { state: '31' },
+            'sensor.device_alarm': { state: 'OK' },
+            'sensor.device_fault': { state: 'OK' },
+            'sensor.daily_solar': { state: '21.3', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_home': { state: '16.4', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_import': { state: '2.2', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_export': { state: '5.8', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_charge': { state: '4.9', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.daily_discharge': { state: '3.1', attributes: { unit_of_measurement: 'kWh' } },
+            'sensor.pv1_power': { state: '3900', attributes: { unit_of_measurement: 'W' } },
+            'sensor.pv2_power': { state: '2300', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l1_power': { state: '1200', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l2_power': { state: '1450', attributes: { unit_of_measurement: 'W' } },
+            'sensor.load_l3_power': { state: '1150', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l1_power': { state: '-200', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l2_power': { state: '-500', attributes: { unit_of_measurement: 'W' } },
+            'sensor.grid_l3_power': { state: '-300', attributes: { unit_of_measurement: 'W' } },
+          },
+        },
+      ];
+
+      const widths = [
+        { label: 'Narrow', className: 'width-narrow' },
+        { label: 'Regular', className: 'width-regular' },
+        { label: 'Wide', className: 'width-wide' },
+      ];
+
+      const page = document.getElementById('page');
+
+      scenarios.forEach((scenario) => {
+        const section = document.createElement('section');
+        section.className = 'scenario';
+        section.innerHTML = `
+          <div class="scenario-copy">
+            <h2>${scenario.name}</h2>
+            <p>${scenario.description}</p>
+          </div>
+        `;
+
+        const row = document.createElement('div');
+        row.className = 'preview-row';
+
+        widths.forEach((width) => {
+          const frame = document.createElement('div');
+          frame.className = `frame ${width.className}`;
+          frame.innerHTML = `<div class="frame-label">${width.label}</div>`;
+
+          const card = document.createElement('zs-power-flow-card');
+          card.hass = { states: scenario.states };
+          card.setConfig({ ...baseConfig, title: scenario.name });
+          frame.appendChild(card);
+          row.appendChild(frame);
+        });
+
+        section.appendChild(row);
+        page.appendChild(section);
+      });
+    </script>
+  </body>
+</html>

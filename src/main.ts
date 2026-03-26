@@ -44,6 +44,8 @@ export class ZsPowerFlowCard extends LitElement {
   @state() private _stageSize: { width: number; height: number } = { width: 640, height: 420 };
   private _resizeObserver?: ResizeObserver;
   private _flowFrame = 0;
+  private _holdTimer?: number;
+  private _holdTriggered = false;
 
   public static getConfigElement(): HTMLElement {
     return document.createElement('zs-power-flow-card-editor');
@@ -73,6 +75,7 @@ export class ZsPowerFlowCard extends LitElement {
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     cancelAnimationFrame(this._flowFrame);
+    this.clearHoldTimer();
     super.disconnectedCallback();
   }
 
@@ -164,6 +167,9 @@ export class ZsPowerFlowCard extends LitElement {
   }
 
   private renderStatusRail(snapshot: PowerFlowSnapshot, advanced: boolean) {
+    const inverterTone = this.getStatusTone(snapshot.inverterStatus);
+    const deviceTone = this.getStatusTone(snapshot.deviceAlarm, snapshot.deviceFault);
+
     return html`
       <div class="status-rail">
         <div class=${`badge ${snapshot.gridConnected === false ? 'warn' : 'ok'}`}>
@@ -171,9 +177,12 @@ export class ZsPowerFlowCard extends LitElement {
           ${snapshot.gridConnected === null ? 'Stan sieci nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}
         </div>
         ${advanced && snapshot.inverterStatus
-          ? html`<div class="badge info">${snapshot.inverterStatus}</div>`
+          ? html`<div class=${`badge info ${inverterTone}`.trim()}>${snapshot.inverterStatus}</div>`
           : nothing}
         ${advanced ? html`<div class="badge soft">${this.describeBatteryStatus(snapshot)}</div>` : nothing}
+        ${advanced && snapshot.deviceAlarm
+          ? html`<div class=${`badge ${deviceTone}`.trim()}>${snapshot.deviceAlarm}</div>`
+          : nothing}
       </div>
     `;
   }
@@ -207,7 +216,11 @@ export class ZsPowerFlowCard extends LitElement {
       <article
         class=${`node ${position} ${entityId ? 'clickable' : ''}`}
         style=${`--accent:${node.accent};`}
-        @click=${() => this.showMoreInfo(entityId)}
+        @click=${() => this.handleTap(entityId)}
+        @pointerdown=${() => this.handlePointerDown(entityId)}
+        @pointerup=${this.handlePointerUp}
+        @pointerleave=${this.handlePointerLeave}
+        @pointercancel=${this.handlePointerLeave}
       >
         <span class=${`flow-anchor node-anchor ${iconName}`}></span>
         <div class="icon">${this.renderIcon(iconName)}</div>
@@ -427,6 +440,16 @@ export class ZsPowerFlowCard extends LitElement {
       return html`<section class="details simple">${baseCards}</section>`;
     }
 
+    const residualCard =
+      snapshot.residualPower > 0
+        ? html`
+            <div class="detail-card warn">
+              <span>${this.describeResidualLabel(snapshot)}</span>
+              <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
+            </div>
+          `
+        : nothing;
+
     return html`
       <section class="details advanced">
         ${baseCards}
@@ -442,10 +465,7 @@ export class ZsPowerFlowCard extends LitElement {
           <span>Bateria do sieci</span>
           <strong>${formatPower(snapshot.batteryToGrid, this._config.decimals ?? 1)}</strong>
         </div>
-        <div class="detail-card ${snapshot.residualPower > 0 ? 'warn' : ''}">
-          <span>${this.describeResidualLabel(snapshot)}</span>
-          <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
-        </div>
+        ${residualCard}
         <div class="detail-card metric">
           <span>Dzienna produkcja</span>
           <strong>${formatKwh(snapshot.dailyEnergy.solar, 1)}</strong>
@@ -533,6 +553,9 @@ export class ZsPowerFlowCard extends LitElement {
   }
 
   private renderHealthRail(snapshot: PowerFlowSnapshot) {
+    const deviceTone = this.getStatusTone(snapshot.deviceAlarm, snapshot.deviceFault);
+    const batteryTone = snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn';
+
     return html`
       <section class="health-rail">
         <div class="health-card">
@@ -545,12 +568,12 @@ export class ZsPowerFlowCard extends LitElement {
           <strong>${snapshot.inverterTemperature === null ? '--' : `${snapshot.inverterTemperature.toFixed(0)}°C`}</strong>
           <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
         </div>
-        <div class="health-card ${this.isHealthy(snapshot.deviceAlarm) ? '' : 'warn'}">
+        <div class=${`health-card ${deviceTone}`.trim()}>
           <span>Alarm urzadzenia</span>
           <strong>${snapshot.deviceAlarm ?? '--'}</strong>
           <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
         </div>
-        <div class="health-card ${snapshot.batteryAlarm === false && snapshot.batteryFault === false ? '' : 'warn'}">
+        <div class=${`health-card ${batteryTone}`.trim()}>
           <span>Alarm baterii</span>
           <strong>${this.describeBinaryHealth(snapshot.batteryAlarm)}</strong>
           <small>Fault: ${this.describeBinaryHealth(snapshot.batteryFault)}</small>
@@ -598,6 +621,54 @@ export class ZsPowerFlowCard extends LitElement {
     return 'Bilans pozostaly';
   }
 
+  private handleTap(entityId?: string) {
+    if (this._holdTriggered) {
+      this._holdTriggered = false;
+      return;
+    }
+    this.fireConfiguredAction(this._config.tap_action, entityId);
+  }
+
+  private handlePointerDown(entityId?: string) {
+    this.clearHoldTimer();
+    this._holdTriggered = false;
+    this._holdTimer = window.setTimeout(() => {
+      this._holdTriggered = true;
+      this.fireConfiguredAction(this._config.hold_action, entityId);
+    }, 450);
+  }
+
+  private handlePointerUp = () => {
+    this.clearHoldTimer();
+  };
+
+  private handlePointerLeave = () => {
+    this.clearHoldTimer();
+  };
+
+  private clearHoldTimer() {
+    if (this._holdTimer !== undefined) {
+      window.clearTimeout(this._holdTimer);
+      this._holdTimer = undefined;
+    }
+  }
+
+  private fireConfiguredAction(actionConfig: ZsPowerFlowCardConfig['tap_action'], entityId?: string) {
+    const action = actionConfig?.action ?? 'more-info';
+
+    if (action === 'none') return;
+    if (action === 'navigate' && actionConfig?.navigation_path) {
+      window.history.pushState(null, '', actionConfig.navigation_path);
+      window.dispatchEvent(new Event('location-changed'));
+      return;
+    }
+    if (action === 'url' && actionConfig?.url_path) {
+      window.open(actionConfig.url_path, '_blank', 'noopener');
+      return;
+    }
+    this.showMoreInfo(entityId);
+  }
+
   private showMoreInfo(entityId?: string) {
     if (!entityId || !this.hass) return;
     this.dispatchEvent(
@@ -612,6 +683,23 @@ export class ZsPowerFlowCard extends LitElement {
   private isHealthy(value: string | null): boolean {
     if (!value) return true;
     return ['ok', 'normal', 'none', 'idle'].includes(value.toLowerCase());
+  }
+
+  private getStatusTone(...values: Array<string | null | undefined>): string {
+    const normalized = values
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.toLowerCase());
+
+    if (normalized.some((value) => value.includes('fault') || value.includes('alarm') || value.includes('error'))) {
+      return 'warn';
+    }
+    if (normalized.some((value) => value.includes('warn') || value.includes('offline'))) {
+      return 'caution';
+    }
+    if (normalized.some((value) => value.includes('normal') || value.includes('ok') || value.includes('idle'))) {
+      return 'ok';
+    }
+    return '';
   }
 
   private describeBinaryHealth(value: boolean | null): string {
@@ -713,6 +801,10 @@ export class ZsPowerFlowCard extends LitElement {
       background: #fca5a5;
     }
 
+    .badge.caution .badge-dot {
+      background: #fcd34d;
+    }
+
     .badge-dot {
       width: 8px;
       height: 8px;
@@ -723,6 +815,20 @@ export class ZsPowerFlowCard extends LitElement {
 
     .badge.soft {
       background: rgba(255, 255, 255, 0.05);
+    }
+
+    .badge.warn {
+      border-color: rgba(248, 113, 113, 0.28);
+      color: #ffe4e6;
+    }
+
+    .badge.caution {
+      border-color: rgba(251, 191, 36, 0.28);
+      color: #fef3c7;
+    }
+
+    .badge.ok {
+      border-color: rgba(134, 239, 172, 0.22);
     }
 
     .stage {
@@ -1081,7 +1187,7 @@ export class ZsPowerFlowCard extends LitElement {
 
     .breakdown-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
       margin-top: 12px;
     }
@@ -1131,14 +1237,14 @@ export class ZsPowerFlowCard extends LitElement {
 
     .advanced-rail {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
       margin-top: 16px;
     }
 
     .health-rail {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
       margin-top: 12px;
     }
@@ -1166,6 +1272,11 @@ export class ZsPowerFlowCard extends LitElement {
       box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
     }
 
+    .health-card.caution {
+      border-color: rgba(251, 191, 36, 0.3);
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.08);
+    }
+
     .health-card span,
     .health-card small {
       display: block;
@@ -1191,11 +1302,11 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .details.simple {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
     .details.advanced {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       align-items: start;
     }
 
@@ -1299,14 +1410,8 @@ export class ZsPowerFlowCard extends LitElement {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .advanced-rail {
-        grid-template-columns: 1fr;
-      }
-
-      .health-rail {
-        grid-template-columns: 1fr;
-      }
-
+      .advanced-rail,
+      .health-rail,
       .breakdown-grid {
         grid-template-columns: 1fr;
       }
@@ -1370,7 +1475,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .details.advanced {
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
 
       .detail-card {
@@ -1385,16 +1490,10 @@ export class ZsPowerFlowCard extends LitElement {
         font-size: 1.36rem;
       }
 
-      .advanced-rail {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .health-rail {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
-
+      .advanced-rail,
+      .health-rail,
       .breakdown-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
     }
 

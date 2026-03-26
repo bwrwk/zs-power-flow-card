@@ -15,14 +15,30 @@ Wersja `0.1.0` to MVP z:
 - prostym editorem Lovelace do podpiania encji i wyboru motywu,
 - fallbackiem demo, gdy encje nie sa jeszcze podpiete.
 
+Nowsze iteracje dodaja tez:
+
+- bardziej wiarygodny bilans energii z rozbiciem `grid -> home`, `grid -> battery`, `battery -> home`, `battery -> grid`,
+- prog szumu mocy, zeby drobne wahania nie udawaly realnego przeplywu,
+- statusy health i alarmow,
+- breakdown MPPT i faz,
+- akcje `tap` i `hold` dla glownych node'ow,
+- harness do lokalnych testow wizualnych.
+
 ## Instalacja developerska
 
 ```bash
 npm install
 npm run build
+npm run visual:serve
 ```
 
 Po zbudowaniu dodaj zasob `zs-power-flow-card.js` do Lovelace.
+
+Harness wizualny bedzie dostepny pod adresem:
+
+```text
+http://localhost:4173/visual/index.html
+```
 
 ## Przykladowa konfiguracja
 
@@ -40,6 +56,12 @@ layout: focus-home
 details_mode: extended
 animation_enabled: true
 show_details: true
+power_noise_floor_w: 30
+tap_action:
+  action: more-info
+hold_action:
+  action: navigate
+  navigation_path: /lovelace/energia
 ```
 
 ## Kierunek rozwoju

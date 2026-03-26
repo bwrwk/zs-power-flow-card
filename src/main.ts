@@ -89,15 +89,36 @@ export class ZsPowerFlowCard extends LitElement {
             ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', this._config.battery_power_entity, snapshot.battery.soc) : nothing}
             ${this.renderNode(snapshot.home, 'bottom right', 'home', this._config.home_entity)}
 
-            ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 206 142 C 238 142, 258 154, 283 177') : nothing}
-            ${this._config.show_solar && this._config.show_battery
-              ? this.renderFlow(snapshot.solarToBattery, snapshot.battery.accent, 'M 190 170 C 190 238, 218 275, 284 299')
+            ${this._config.show_solar
+              ? this.renderFlow({
+                  power: snapshot.solar.value,
+                  color: snapshot.solar.accent,
+                  path: 'M 224 164 C 250 160, 272 170, 296 190',
+                  direction: 'forward',
+                })
               : nothing}
-            ${this._config.show_solar && this._config.show_grid
-              ? this.renderFlow(snapshot.solarToGrid, snapshot.grid.accent, 'M 232 126 C 318 92, 404 96, 482 124')
+            ${this._config.show_grid
+              ? this.renderFlow({
+                  power: Math.abs(snapshot.grid.value),
+                  color: snapshot.grid.accent,
+                  path: 'M 474 178 C 444 174, 418 182, 394 198',
+                  direction: snapshot.grid.value >= 0 ? 'forward' : 'reverse',
+                })
               : nothing}
-            ${this._config.show_grid ? this.renderFlow(snapshot.gridToHome, snapshot.grid.accent, 'M 486 164 C 503 198, 488 244, 430 282') : nothing}
-            ${this._config.show_battery ? this.renderFlow(snapshot.batteryToHome, snapshot.battery.accent, 'M 358 315 C 402 328, 448 328, 498 312') : nothing}
+            ${this._config.show_battery
+              ? this.renderFlow({
+                  power: Math.abs(snapshot.battery.value),
+                  color: snapshot.battery.accent,
+                  path: 'M 224 298 C 250 306, 272 296, 296 274',
+                  direction: snapshot.battery.value > 0 ? 'forward' : 'reverse',
+                })
+              : nothing}
+            ${this.renderFlow({
+              power: snapshot.home.value,
+              color: snapshot.home.accent,
+              path: 'M 396 274 C 426 292, 452 302, 476 304',
+              direction: 'forward',
+            })}
           </div>
 
           ${advanced ? this.renderAdvancedRail(snapshot) : nothing}
@@ -195,12 +216,23 @@ export class ZsPowerFlowCard extends LitElement {
     return paths[iconName];
   }
 
-  private renderFlow(power: number, color: string, path: string) {
+  private renderFlow({
+    power,
+    color,
+    path,
+    direction,
+  }: {
+    power: number;
+    color: string;
+    path: string;
+    direction: 'forward' | 'reverse';
+  }) {
     const active = power > 12;
     const width = Math.max(2, Math.min(8, Math.abs(power) < 250 ? 2.6 : Math.abs(power) / 420));
     const animate = this._config.animation_enabled ?? true;
     const glow = Math.max(0.16, Math.min(0.42, Math.abs(power) / 3000));
     const style = this._config.flow_style ?? 'soft';
+    const flowDirection = direction === 'reverse' ? 1 : -1;
 
     return html`
       <svg class="flow" viewBox="0 0 640 420" preserveAspectRatio="none" aria-hidden="true">
@@ -212,7 +244,7 @@ export class ZsPowerFlowCard extends LitElement {
         ></path>
         <path
           class=${`flow-line ${style} ${active ? 'visible' : ''} ${active && animate ? 'active' : ''}`}
-          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.6, 7.6 - Math.min(Math.abs(power) / 700, 4.2))}s;`}
+          style=${`--flow-color:${color}; --flow-width:${width}px; --flow-speed:${Math.max(2.6, 7.6 - Math.min(Math.abs(power) / 700, 4.2))}s; --flow-direction:${flowDirection};`}
           d=${path}
         ></path>
       </svg>
@@ -972,7 +1004,7 @@ export class ZsPowerFlowCard extends LitElement {
         stroke-dashoffset: 0;
       }
       to {
-        stroke-dashoffset: -168;
+        stroke-dashoffset: calc(-168 * var(--flow-direction));
       }
     }
 

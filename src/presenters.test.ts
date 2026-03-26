@@ -11,6 +11,14 @@ const baseConfig: ZsPowerFlowCardConfig = {
   home_entity: 'sensor.home',
   battery_capacity_kwh: 15,
   theme: 'aurora',
+  grid_connected_entity: 'binary_sensor.grid_connected',
+  inverter_status_entity: 'sensor.inverter_status',
+  daily_solar_energy_entity: 'sensor.daily_solar',
+  daily_home_energy_entity: 'sensor.daily_home',
+  daily_grid_import_energy_entity: 'sensor.daily_grid_import',
+  daily_grid_export_energy_entity: 'sensor.daily_grid_export',
+  daily_battery_charge_energy_entity: 'sensor.daily_battery_charge',
+  daily_battery_discharge_energy_entity: 'sensor.daily_battery_discharge',
 };
 
 describe('buildSnapshot', () => {
@@ -23,6 +31,14 @@ describe('buildSnapshot', () => {
           'sensor.battery_power': { state: '-1.4' },
           'sensor.battery_soc': { state: '80' },
           'sensor.home': { state: '3.8' },
+          'binary_sensor.grid_connected': { state: 'on' },
+          'sensor.inverter_status': { state: 'Normal' },
+          'sensor.daily_solar': { state: '21.3' },
+          'sensor.daily_home': { state: '16.4' },
+          'sensor.daily_grid_import': { state: '2.2' },
+          'sensor.daily_grid_export': { state: '5.8' },
+          'sensor.daily_battery_charge': { state: '4.9' },
+          'sensor.daily_battery_discharge': { state: '3.1' },
         },
       },
       baseConfig,
@@ -34,6 +50,9 @@ describe('buildSnapshot', () => {
     expect(snapshot.grid.secondary).toBe('Eksport');
     expect(snapshot.battery.mode).toBe('charging');
     expect(snapshot.batteryStoredKwh).toBeCloseTo(12);
+    expect(snapshot.gridConnected).toBe(true);
+    expect(snapshot.inverterStatus).toBe('Normal');
+    expect(snapshot.dailyEnergy.solar).toBeCloseTo(21.3);
   });
 
   it('maps grid import and battery discharge correctly', () => {

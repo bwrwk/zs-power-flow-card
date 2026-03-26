@@ -1,15 +1,18 @@
-import { LitElement, css, html } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { FlowLayout, FlowTheme, ZsPowerFlowCardConfig } from './types';
+import { LitElement, css, html, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { ZsPowerFlowCardConfig } from './types';
 
 type HomeAssistantEditor = {
-  localize?: (key: string) => string;
+  states: Record<string, { entity_id?: string }>;
 };
+
+type EditorTab = 'data' | 'display';
 
 @customElement('zs-power-flow-card-editor')
 export class ZsPowerFlowCardEditor extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistantEditor;
-  @property({ attribute: false }) private _config?: ZsPowerFlowCardConfig;
+  @state() private _config?: ZsPowerFlowCardConfig;
+  @state() private _tab: EditorTab = 'data';
 
   public setConfig(config: ZsPowerFlowCardConfig): void {
     this._config = config;
@@ -18,44 +21,118 @@ export class ZsPowerFlowCardEditor extends LitElement {
   protected render() {
     const config = this._config;
     if (!config) {
-      return html``;
+      return nothing;
     }
 
     return html`
+      <div class="tabs">
+        <button class=${this._tab === 'data' ? 'active' : ''} @click=${() => this.setTab('data')}>Konfiguracja</button>
+        <button class=${this._tab === 'display' ? 'active' : ''} @click=${() => this.setTab('display')}>Widocznosc</button>
+      </div>
+
+      ${this._tab === 'data' ? this.renderDataTab(config) : this.renderDisplayTab(config)}
+    `;
+  }
+
+  private renderDataTab(config: ZsPowerFlowCardConfig) {
+    return html`
       <div class="form">
         ${this.renderTextField('Tytul', 'title', config.title ?? '')}
-        ${this.renderEntityField('Produkcja PV', 'solar_entity', config.solar_entity ?? '')}
-        ${this.renderEntityField('Moc sieci', 'grid_entity', config.grid_entity ?? '')}
-        ${this.renderEntityField('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '')}
-        ${this.renderEntityField('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '')}
-        ${this.renderEntityField('Zuzycie domu', 'home_entity', config.home_entity ?? '')}
-        ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh)}
 
-        <div class="row">
-          ${this.renderSelectField('Motyw', 'theme', config.theme ?? 'aurora', [
-            ['aurora', 'Aurora'],
-            ['graphite', 'Graphite'],
-            ['sunset', 'Sunset'],
-          ])}
-          ${this.renderSelectField('Layout', 'layout', config.layout ?? 'balanced', [
-            ['balanced', 'Balanced'],
-            ['focus-home', 'Focus home'],
-          ])}
+        <div class="section">
+          <div class="section-header">
+            <h4>Encje energii</h4>
+            <p>Wybierz sensory mocy. Dla tej wersji przyjmujemy: siec plus = import, minus = eksport; bateria plus = rozladowanie, minus = ladowanie.</p>
+          </div>
+
+          ${this.renderEntityPicker('Produkcja PV', 'solar_entity', config.solar_entity ?? '', ['sensor'])}
+          ${this.renderEntityPicker('Moc sieci', 'grid_entity', config.grid_entity ?? '', ['sensor'])}
+          ${this.renderEntityPicker('Moc baterii', 'battery_power_entity', config.battery_power_entity ?? '', ['sensor'])}
+          ${this.renderEntityPicker('SOC baterii', 'battery_soc_entity', config.battery_soc_entity ?? '', ['sensor'])}
+          ${this.renderEntityPicker('Zuzycie domu', 'home_entity', config.home_entity ?? '', ['sensor'])}
+          ${this.renderNumberField('Pojemnosc baterii (kWh)', 'battery_capacity_kwh', config.battery_capacity_kwh)}
+          ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals)}
         </div>
 
-        <div class="row">
-          ${this.renderToggle('Pokaz szczegoly', 'show_details', config.show_details ?? true)}
-          ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
-            ['summary', 'Summary'],
-            ['extended', 'Extended'],
-          ])}
+        <div class="section">
+          <div class="section-header">
+            <h4>Status i encje zaawansowane</h4>
+            <p>Te pola sa szczegolnie przydatne dla widoku advanced. Mozesz je zostawic puste, jesli jeszcze nie masz takich sensorow.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderEntityPicker('Stan on/off-grid', 'grid_connected_entity', config.grid_connected_entity ?? '', ['binary_sensor', 'sensor'])}
+            ${this.renderEntityPicker('Status inwertera', 'inverter_status_entity', config.inverter_status_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Produkcja dzienna', 'daily_solar_energy_entity', config.daily_solar_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Zuzycie dzienne', 'daily_home_energy_entity', config.daily_home_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Import dzienny', 'daily_grid_import_energy_entity', config.daily_grid_import_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Eksport dzienny', 'daily_grid_export_energy_entity', config.daily_grid_export_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Ladowanie baterii dzisiaj', 'daily_battery_charge_energy_entity', config.daily_battery_charge_energy_entity ?? '', ['sensor'])}
+            ${this.renderEntityPicker('Rozladowanie baterii dzisiaj', 'daily_battery_discharge_energy_entity', config.daily_battery_discharge_energy_entity ?? '', ['sensor'])}
+          </div>
         </div>
 
-        <div class="toggles">
-          ${this.renderToggle('Pokaz PV', 'show_solar', config.show_solar ?? true)}
-          ${this.renderToggle('Pokaz siec', 'show_grid', config.show_grid ?? true)}
-          ${this.renderToggle('Pokaz baterie', 'show_battery', config.show_battery ?? true)}
-          ${this.renderToggle('Animacje', 'animation_enabled', config.animation_enabled ?? true)}
+        <div class="section">
+          <div class="section-header">
+            <h4>Etykiety</h4>
+            <p>Opcjonalnie zmien nazwy blokow widocznych na karcie.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderTextField('Etykieta PV', 'solar_label', config.solar_label ?? '')}
+            ${this.renderTextField('Etykieta sieci', 'grid_label', config.grid_label ?? '')}
+            ${this.renderTextField('Etykieta baterii', 'battery_label', config.battery_label ?? '')}
+            ${this.renderTextField('Etykieta domu', 'home_label', config.home_label ?? '')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderDisplayTab(config: ZsPowerFlowCardConfig) {
+    return html`
+      <div class="form">
+        <div class="section">
+          <div class="section-header">
+            <h4>Wyglad</h4>
+            <p>Ustaw motyw, layout i sposob prezentacji szczegolow.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderSelectField('Widok', 'view_mode', config.view_mode ?? 'simple', [
+              ['simple', 'Simple'],
+              ['advanced', 'Advanced'],
+            ])}
+            ${this.renderSelectField('Motyw', 'theme', config.theme ?? 'aurora', [
+              ['aurora', 'Aurora'],
+              ['graphite', 'Graphite'],
+              ['sunset', 'Sunset'],
+            ])}
+            ${this.renderSelectField('Layout', 'layout', config.layout ?? 'balanced', [
+              ['balanced', 'Balanced'],
+              ['focus-home', 'Focus home'],
+            ])}
+            ${this.renderToggleCard('Pokaz szczegoly', 'show_details', config.show_details ?? true)}
+            ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
+              ['summary', 'Summary'],
+              ['extended', 'Extended'],
+            ])}
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <h4>Widocznosc elementow</h4>
+            <p>Ukryj sekcje, ktorych nie ma w instalacji lub ktorych nie chcesz pokazywac.</p>
+          </div>
+
+          <div class="grid two">
+            ${this.renderToggleCard('Pokaz PV', 'show_solar', config.show_solar ?? true)}
+            ${this.renderToggleCard('Pokaz siec', 'show_grid', config.show_grid ?? true)}
+            ${this.renderToggleCard('Pokaz baterie', 'show_battery', config.show_battery ?? true)}
+            ${this.renderToggleCard('Animacje przeplywu', 'animation_enabled', config.animation_enabled ?? true)}
+            ${this.renderToggleCard('Belka statusu', 'show_status_bar', config.show_status_bar ?? true)}
+          </div>
         </div>
       </div>
     `;
@@ -63,37 +140,50 @@ export class ZsPowerFlowCardEditor extends LitElement {
 
   private renderTextField(label: string, key: keyof ZsPowerFlowCardConfig, value: string) {
     return html`
-      <label class="field">
-        <span>${label}</span>
-        <input .value=${value} @input=${(event: Event) => this.updateConfig(key, (event.target as HTMLInputElement).value)} />
-      </label>
+      <ha-textfield
+        .label=${label}
+        .value=${value}
+        @input=${(event: Event) => this.updateConfig(key, (event.target as HTMLInputElement).value)}
+      ></ha-textfield>
     `;
   }
 
-  private renderEntityField(label: string, key: keyof ZsPowerFlowCardConfig, value: string) {
-    return this.renderTextField(label, key, value);
+  private renderEntityPicker(
+    label: string,
+    key: keyof ZsPowerFlowCardConfig,
+    value: string,
+    includeDomains: string[],
+  ) {
+    return html`
+      <ha-entity-picker
+        .hass=${this.hass}
+        .label=${label}
+        .value=${value}
+        .includeDomains=${includeDomains}
+        .allowCustomEntity=${true}
+        @value-changed=${(event: CustomEvent) => this.updateConfig(key, event.detail.value || undefined)}
+      ></ha-entity-picker>
+    `;
   }
 
   private renderNumberField(label: string, key: keyof ZsPowerFlowCardConfig, value?: number) {
     return html`
-      <label class="field">
-        <span>${label}</span>
-        <input
-          type="number"
-          .value=${value === undefined ? '' : String(value)}
-          @input=${(event: Event) => {
-            const next = (event.target as HTMLInputElement).value;
-            this.updateConfig(key, next === '' ? undefined : Number(next));
-          }}
-        />
-      </label>
+      <ha-textfield
+        .label=${label}
+        type="number"
+        .value=${value === undefined ? '' : String(value)}
+        @input=${(event: Event) => {
+          const next = (event.target as HTMLInputElement).value;
+          this.updateConfig(key, next === '' ? undefined : Number(next));
+        }}
+      ></ha-textfield>
     `;
   }
 
   private renderSelectField(
     label: string,
     key: keyof ZsPowerFlowCardConfig,
-    value: FlowTheme | FlowLayout | 'summary' | 'extended',
+    value: string,
     options: Array<[string, string]>,
   ) {
     return html`
@@ -106,13 +196,19 @@ export class ZsPowerFlowCardEditor extends LitElement {
     `;
   }
 
-  private renderToggle(label: string, key: keyof ZsPowerFlowCardConfig, value: boolean) {
+  private renderToggleCard(label: string, key: keyof ZsPowerFlowCardConfig, value: boolean) {
     return html`
-      <label class="toggle">
-        <input type="checkbox" .checked=${value} @change=${(event: Event) => this.updateConfig(key, (event.target as HTMLInputElement).checked)} />
-        <span>${label}</span>
-      </label>
+      <ha-formfield .label=${label}>
+        <ha-checkbox
+          .checked=${value}
+          @change=${(event: Event) => this.updateConfig(key, (event.target as HTMLInputElement).checked)}
+        ></ha-checkbox>
+      </ha-formfield>
     `;
+  }
+
+  private setTab(tab: EditorTab) {
+    this._tab = tab;
   }
 
   private updateConfig(key: keyof ZsPowerFlowCardConfig, value: unknown) {
@@ -134,18 +230,60 @@ export class ZsPowerFlowCardEditor extends LitElement {
   static styles = css`
     :host {
       display: block;
+      padding-top: 8px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 24px;
+      border-bottom: 1px solid var(--divider-color);
+      margin-bottom: 16px;
+    }
+
+    .tabs button {
+      background: none;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      padding: 10px 2px 12px;
+      color: var(--secondary-text-color);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .tabs button.active {
+      color: var(--primary-text-color);
+      border-bottom-color: var(--primary-color);
     }
 
     .form {
       display: grid;
-      gap: 12px;
-      padding: 8px 0;
+      gap: 16px;
     }
 
-    .row {
+    .section {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    .section-header h4 {
+      margin: 0 0 4px;
+      font-size: 1rem;
+    }
+
+    .section-header p {
+      margin: 0;
+      color: var(--secondary-text-color);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .field {
@@ -154,11 +292,10 @@ export class ZsPowerFlowCardEditor extends LitElement {
     }
 
     .field span {
-      font-size: 0.85rem;
       color: var(--secondary-text-color);
+      font-size: 0.85rem;
     }
 
-    input,
     select {
       width: 100%;
       box-sizing: border-box;
@@ -170,19 +307,23 @@ export class ZsPowerFlowCardEditor extends LitElement {
       font: inherit;
     }
 
-    .toggles {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+    ha-formfield {
+      border: 1px solid var(--divider-color);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: flex;
+      background: var(--card-background-color);
     }
 
-    .toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border: 1px solid var(--divider-color);
-      border-radius: 12px;
-      padding: 10px 12px;
+    ha-textfield,
+    ha-entity-picker {
+      display: block;
+    }
+
+    @media (max-width: 640px) {
+      .grid.two {
+        grid-template-columns: 1fr;
+      }
     }
   `;
 }

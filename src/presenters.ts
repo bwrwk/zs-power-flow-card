@@ -48,6 +48,27 @@ function parseEntityNumber(hass: HomeAssistantLike | undefined, entityId: string
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseOptionalEntityNumber(hass: HomeAssistantLike | undefined, entityId: string | undefined): number | null {
+  if (!hass || !entityId) return null;
+  const raw = hass.states[entityId]?.state;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseEntityText(hass: HomeAssistantLike | undefined, entityId: string | undefined): string | null {
+  if (!hass || !entityId) return null;
+  const value = hass.states[entityId]?.state;
+  return value && value !== 'unknown' && value !== 'unavailable' ? value : null;
+}
+
+function parseGridConnected(hass: HomeAssistantLike | undefined, entityId: string | undefined): boolean | null {
+  const state = parseEntityText(hass, entityId)?.toLowerCase();
+  if (!state) return null;
+  if (['on', 'connected', 'online', 'true', '1'].includes(state)) return true;
+  if (['off', 'disconnected', 'offline', 'false', '0'].includes(state)) return false;
+  return null;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -77,6 +98,8 @@ export function buildSnapshot(
   const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
   const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
   const netHomeDemand = home - solar;
+  const gridConnected = parseGridConnected(hass, config.grid_connected_entity);
+  const inverterStatus = parseEntityText(hass, config.inverter_status_entity);
 
   return {
     solar: {
@@ -116,6 +139,16 @@ export function buildSnapshot(
     batteryToHome,
     batteryStoredKwh,
     netHomeDemand,
+    gridConnected,
+    inverterStatus,
+    dailyEnergy: {
+      solar: parseOptionalEntityNumber(hass, config.daily_solar_energy_entity),
+      home: parseOptionalEntityNumber(hass, config.daily_home_energy_entity),
+      gridImport: parseOptionalEntityNumber(hass, config.daily_grid_import_energy_entity),
+      gridExport: parseOptionalEntityNumber(hass, config.daily_grid_export_energy_entity),
+      batteryCharge: parseOptionalEntityNumber(hass, config.daily_battery_charge_energy_entity),
+      batteryDischarge: parseOptionalEntityNumber(hass, config.daily_battery_discharge_energy_entity),
+    },
   };
 }
 
@@ -126,4 +159,9 @@ export function formatPower(value: number, decimals = 1): string {
 export function formatEnergy(value: number | null, decimals = 0): string {
   if (value === null) return '--';
   return `${value.toFixed(decimals)}%`;
+}
+
+export function formatKwh(value: number | null, decimals = 1): string {
+  if (value === null) return '--';
+  return `${value.toFixed(decimals)} kWh`;
 }

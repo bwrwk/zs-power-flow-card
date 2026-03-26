@@ -2,6 +2,7 @@ export type FlowTheme = 'aurora' | 'graphite' | 'sunset';
 export type FlowLayout = 'balanced' | 'focus-home';
 export type DetailsMode = 'summary' | 'extended';
 export type ViewMode = 'simple' | 'advanced';
+export type VisualPreset = 'default' | 'compact' | 'analytics';
 
 export interface HomeAssistantLike {
   states: Record<string, { state: string; attributes?: Record<string, unknown> }>;
@@ -46,6 +47,7 @@ export interface ZsPowerFlowCardConfig {
   theme?: FlowTheme;
   layout?: FlowLayout;
   view_mode?: ViewMode;
+  visual_preset?: VisualPreset;
   show_details?: boolean;
   details_mode?: DetailsMode;
   show_solar?: boolean;

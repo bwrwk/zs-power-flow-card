@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './editor';
-import { buildSnapshot, formatEnergy, formatKwh, formatPower, getThemeTokens } from './presenters';
+import { buildSnapshot, formatEnergy, formatKwh, formatPower, getThemeTokens, prettifyStatus } from './presenters';
 import { HomeAssistantLike, PowerFlowSnapshot, ZsPowerFlowCardConfig } from './types';
 
 declare global {
@@ -17,6 +17,7 @@ const DEFAULT_CONFIG: ZsPowerFlowCardConfig = {
   theme: 'aurora',
   layout: 'balanced',
   view_mode: 'simple',
+  visual_preset: 'default',
   show_details: true,
   details_mode: 'summary',
   show_solar: true,
@@ -56,6 +57,7 @@ export class ZsPowerFlowCard extends LitElement {
     const theme = getThemeTokens(this._config.theme);
     const layoutClass = this._config.layout === 'focus-home' ? 'layout-focus-home' : 'layout-balanced';
     const advanced = this._config.view_mode === 'advanced';
+    const presetClass = `preset-${this._config.visual_preset ?? 'default'}`;
 
     return html`
       <ha-card
@@ -74,16 +76,16 @@ export class ZsPowerFlowCard extends LitElement {
             </div>
           </div>
 
-          <div class=${`stage ${layoutClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
+          <div class=${`stage ${layoutClass} ${presetClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
             <div class="ambient ambient-a"></div>
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
 
-            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar') : nothing}
-            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid') : nothing}
+            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar', this._config.solar_entity) : nothing}
+            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid', this._config.grid_entity) : nothing}
             ${this.renderCore(snapshot, advanced)}
-            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', snapshot.battery.soc) : nothing}
-            ${this.renderNode(snapshot.home, 'bottom right', 'home')}
+            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', this._config.battery_power_entity, snapshot.battery.soc) : nothing}
+            ${this.renderNode(snapshot.home, 'bottom right', 'home', this._config.home_entity)}
 
             ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : nothing}
             ${this._config.show_solar && this._config.show_battery
@@ -138,10 +140,15 @@ export class ZsPowerFlowCard extends LitElement {
     node: PowerFlowSnapshot['solar'] | PowerFlowSnapshot['grid'] | PowerFlowSnapshot['home'] | PowerFlowSnapshot['battery'],
     position: string,
     iconName: 'solar' | 'grid' | 'battery' | 'home',
+    entityId?: string,
     soc?: number | null,
   ) {
     return html`
-      <article class="node ${position}" style=${`--accent:${node.accent};`}>
+      <article
+        class=${`node ${position} ${entityId ? 'clickable' : ''}`}
+        style=${`--accent:${node.accent};`}
+        @click=${() => this.showMoreInfo(entityId)}
+      >
         <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
@@ -271,13 +278,13 @@ export class ZsPowerFlowCard extends LitElement {
       <section class="advanced-rail">
         <div class="rail-card">
           <span>Tryb pracy</span>
-          <strong>${snapshot.workMode ?? this.describeSystemBalance(snapshot)}</strong>
-          <small>${snapshot.energyPattern ?? snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+          <strong>${prettifyStatus(snapshot.workMode) ?? this.describeSystemBalance(snapshot)}</strong>
+          <small>${prettifyStatus(snapshot.energyPattern) ?? prettifyStatus(snapshot.inverterStatus) ?? 'Brak statusu inwertera'}</small>
         </div>
         <div class="rail-card">
           <span>Stan magazynu</span>
           <strong>${this.describeBatteryStatus(snapshot)}</strong>
-          <small>${snapshot.batteryState ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
+          <small>${prettifyStatus(snapshot.batteryState) ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
           <span>Tryb polaczenia</span>
@@ -371,19 +378,21 @@ export class ZsPowerFlowCard extends LitElement {
   }
 
   private describeBatteryStatus(snapshot: PowerFlowSnapshot): string {
-    if (snapshot.batteryState) return this.formatStatusLabel(snapshot.batteryState);
+    if (snapshot.batteryState) return prettifyStatus(snapshot.batteryState) ?? snapshot.batteryState;
     if (snapshot.battery.mode === 'charging') return 'Ladowanie';
     if (snapshot.battery.mode === 'discharging') return 'Rozladowanie';
     return 'Stabilny bufor';
   }
 
-  private formatStatusLabel(value: string): string {
-    const normalized = value.toLowerCase();
-    if (normalized === 'idle') return 'Idle';
-    if (normalized === 'charging') return 'Ladowanie';
-    if (normalized === 'discharging') return 'Rozladowanie';
-    if (normalized === 'normal') return 'Normal';
-    return value;
+  private showMoreInfo(entityId?: string) {
+    if (!entityId || !this.hass) return;
+    this.dispatchEvent(
+      new CustomEvent('hass-more-info', {
+        detail: { entityId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private isHealthy(value: string | null): boolean {
@@ -517,6 +526,14 @@ export class ZsPowerFlowCard extends LitElement {
       min-height: 450px;
     }
 
+    .stage.preset-compact {
+      min-height: 390px;
+    }
+
+    .stage.preset-analytics {
+      min-height: 470px;
+    }
+
     .ambient {
       position: absolute;
       border-radius: 999px;
@@ -629,6 +646,10 @@ export class ZsPowerFlowCard extends LitElement {
     .node:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--accent) 28%, rgba(255,255,255,0.08));
+    }
+
+    .node.clickable {
+      cursor: pointer;
     }
 
     .top.left {

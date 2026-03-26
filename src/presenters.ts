@@ -255,3 +255,25 @@ export function formatKwh(value: number | null, decimals = 1): string {
   if (value === null) return '--';
   return `${value.toFixed(decimals)} kWh`;
 }
+
+export function prettifyStatus(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+
+  const map: Record<string, string> = {
+    idle: 'Idle',
+    charging: 'Ladowanie',
+    discharging: 'Rozladowanie',
+    normal: 'Normal',
+    fault: 'Fault',
+    alarm: 'Alarm',
+    'battery first': 'Battery First',
+    'load first': 'Load First',
+    'zero export to load': 'Zero Export To Load',
+    'selling first': 'Selling First',
+    'on-grid': 'On-grid',
+    'off-grid': 'Off-grid',
+  };
+
+  return map[normalized] ?? value;
+}

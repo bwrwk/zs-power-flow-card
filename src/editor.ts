@@ -67,6 +67,11 @@ export class ZsPowerFlowCardEditor extends LitElement {
               ['balanced', 'Balanced'],
               ['focus-home', 'Focus home'],
             ], 'Balanced jest bardziej symetryczny, a Focus home bardziej eksponuje zuzycie domu.')}
+            ${this.renderSelectField('Preset wizualny', 'visual_preset', config.visual_preset ?? 'default', [
+              ['default', 'Default'],
+              ['compact', 'Compact'],
+              ['analytics', 'Analytics'],
+            ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
               ['summary', 'Summary'],
               ['extended', 'Extended'],

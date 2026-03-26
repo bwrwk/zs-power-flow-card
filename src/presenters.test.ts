@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSnapshot, formatKwh, formatPower, getThemeTokens } from './presenters';
+import { buildSnapshot, formatKwh, formatPower, getThemeTokens, prettifyStatus } from './presenters';
 import { ZsPowerFlowCardConfig } from './types';
 
 const baseConfig: ZsPowerFlowCardConfig = {
@@ -137,5 +137,10 @@ describe('formatters', () => {
 
   it('formats energy in kWh', () => {
     expect(formatKwh(2.1, 1)).toBe('2.1 kWh');
+  });
+
+  it('prettifies known statuses', () => {
+    expect(prettifyStatus('charging')).toBe('Ladowanie');
+    expect(prettifyStatus('Battery First')).toBe('Battery First');
   });
 });

@@ -125,6 +125,11 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ['balanced', 'Balanced'],
             ['focus-home', 'Focus home'],
         ], 'Balanced jest bardziej symetryczny, a Focus home bardziej eksponuje zuzycie domu.')}
+            ${this.renderSelectField('Preset wizualny', 'visual_preset', config.visual_preset ?? 'default', [
+            ['default', 'Default'],
+            ['compact', 'Compact'],
+            ['analytics', 'Analytics'],
+        ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
             ['summary', 'Summary'],
             ['extended', 'Extended'],
@@ -668,6 +673,26 @@ function formatKwh(value, decimals = 1) {
         return '--';
     return `${value.toFixed(decimals)} kWh`;
 }
+function prettifyStatus(value) {
+    if (!value)
+        return null;
+    const normalized = value.toLowerCase();
+    const map = {
+        idle: 'Idle',
+        charging: 'Ladowanie',
+        discharging: 'Rozladowanie',
+        normal: 'Normal',
+        fault: 'Fault',
+        alarm: 'Alarm',
+        'battery first': 'Battery First',
+        'load first': 'Load First',
+        'zero export to load': 'Zero Export To Load',
+        'selling first': 'Selling First',
+        'on-grid': 'On-grid',
+        'off-grid': 'Off-grid',
+    };
+    return map[normalized] ?? value;
+}
 
 const DEFAULT_CONFIG = {
     type: 'custom:zs-power-flow-card',
@@ -676,6 +701,7 @@ const DEFAULT_CONFIG = {
     theme: 'aurora',
     layout: 'balanced',
     view_mode: 'simple',
+    visual_preset: 'default',
     show_details: true,
     details_mode: 'summary',
     show_solar: true,
@@ -710,6 +736,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         const theme = getThemeTokens(this._config.theme);
         const layoutClass = this._config.layout === 'focus-home' ? 'layout-focus-home' : 'layout-balanced';
         const advanced = this._config.view_mode === 'advanced';
+        const presetClass = `preset-${this._config.visual_preset ?? 'default'}`;
         return b `
       <ha-card
         style=${`--zs-panel:${theme.panel}; --zs-border:${theme.border}; --zs-text:${theme.text}; --zs-muted:${theme.muted}; --zs-solar:${theme.solar}; --zs-grid:${theme.grid}; --zs-battery:${theme.battery}; --zs-home:${theme.home};`}
@@ -727,16 +754,16 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             </div>
           </div>
 
-          <div class=${`stage ${layoutClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
+          <div class=${`stage ${layoutClass} ${presetClass} ${advanced ? 'stage-advanced' : 'stage-simple'}`}>
             <div class="ambient ambient-a"></div>
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
 
-            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar') : A}
-            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid') : A}
+            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar', this._config.solar_entity) : A}
+            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid', this._config.grid_entity) : A}
             ${this.renderCore(snapshot, advanced)}
-            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', snapshot.battery.soc) : A}
-            ${this.renderNode(snapshot.home, 'bottom right', 'home')}
+            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', this._config.battery_power_entity, snapshot.battery.soc) : A}
+            ${this.renderNode(snapshot.home, 'bottom right', 'home', this._config.home_entity)}
 
             ${this._config.show_solar ? this.renderFlow(snapshot.solarToHome, snapshot.solar.accent, 'M 190 145 C 255 145, 280 178, 315 208') : A}
             ${this._config.show_solar && this._config.show_battery
@@ -784,9 +811,13 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       </div>
     `;
     }
-    renderNode(node, position, iconName, soc) {
+    renderNode(node, position, iconName, entityId, soc) {
         return b `
-      <article class="node ${position}" style=${`--accent:${node.accent};`}>
+      <article
+        class=${`node ${position} ${entityId ? 'clickable' : ''}`}
+        style=${`--accent:${node.accent};`}
+        @click=${() => this.showMoreInfo(entityId)}
+      >
         <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
@@ -908,13 +939,13 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       <section class="advanced-rail">
         <div class="rail-card">
           <span>Tryb pracy</span>
-          <strong>${snapshot.workMode ?? this.describeSystemBalance(snapshot)}</strong>
-          <small>${snapshot.energyPattern ?? snapshot.inverterStatus ?? 'Brak statusu inwertera'}</small>
+          <strong>${prettifyStatus(snapshot.workMode) ?? this.describeSystemBalance(snapshot)}</strong>
+          <small>${prettifyStatus(snapshot.energyPattern) ?? prettifyStatus(snapshot.inverterStatus) ?? 'Brak statusu inwertera'}</small>
         </div>
         <div class="rail-card">
           <span>Stan magazynu</span>
           <strong>${this.describeBatteryStatus(snapshot)}</strong>
-          <small>${snapshot.batteryState ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
+          <small>${prettifyStatus(snapshot.batteryState) ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
           <span>Tryb polaczenia</span>
@@ -1000,24 +1031,21 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     }
     describeBatteryStatus(snapshot) {
         if (snapshot.batteryState)
-            return this.formatStatusLabel(snapshot.batteryState);
+            return prettifyStatus(snapshot.batteryState) ?? snapshot.batteryState;
         if (snapshot.battery.mode === 'charging')
             return 'Ladowanie';
         if (snapshot.battery.mode === 'discharging')
             return 'Rozladowanie';
         return 'Stabilny bufor';
     }
-    formatStatusLabel(value) {
-        const normalized = value.toLowerCase();
-        if (normalized === 'idle')
-            return 'Idle';
-        if (normalized === 'charging')
-            return 'Ladowanie';
-        if (normalized === 'discharging')
-            return 'Rozladowanie';
-        if (normalized === 'normal')
-            return 'Normal';
-        return value;
+    showMoreInfo(entityId) {
+        if (!entityId || !this.hass)
+            return;
+        this.dispatchEvent(new CustomEvent('hass-more-info', {
+            detail: { entityId },
+            bubbles: true,
+            composed: true,
+        }));
     }
     isHealthy(value) {
         if (!value)
@@ -1151,6 +1179,14 @@ ZsPowerFlowCard.styles = i$3 `
       min-height: 450px;
     }
 
+    .stage.preset-compact {
+      min-height: 390px;
+    }
+
+    .stage.preset-analytics {
+      min-height: 470px;
+    }
+
     .ambient {
       position: absolute;
       border-radius: 999px;
@@ -1263,6 +1299,10 @@ ZsPowerFlowCard.styles = i$3 `
     .node:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--accent) 28%, rgba(255,255,255,0.08));
+    }
+
+    .node.clickable {
+      cursor: pointer;
     }
 
     .top.left {

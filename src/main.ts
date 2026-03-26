@@ -124,7 +124,7 @@ export class ZsPowerFlowCard extends LitElement {
 
             ${this._config.show_solar
               ? this.renderFlow({
-                  power: snapshot.solar.value,
+                  power: snapshot.solar.flowValue,
                   color: snapshot.solar.accent,
                   path: this._flowPaths.solar,
                   direction: 'forward',
@@ -132,18 +132,18 @@ export class ZsPowerFlowCard extends LitElement {
               : nothing}
             ${this._config.show_grid
               ? this.renderFlow({
-                  power: Math.abs(snapshot.grid.value),
+                  power: Math.abs(snapshot.grid.flowValue),
                   color: snapshot.grid.accent,
                   path: this._flowPaths.grid,
-                  direction: snapshot.grid.value >= 0 ? 'forward' : 'reverse',
+                  direction: snapshot.grid.flowValue >= 0 ? 'forward' : 'reverse',
                 })
               : nothing}
             ${this._config.show_battery
               ? this.renderFlow({
-                  power: Math.abs(snapshot.battery.value),
+                  power: Math.abs(snapshot.battery.flowValue),
                   color: snapshot.battery.accent,
                   path: this._flowPaths.battery,
-                  direction: snapshot.battery.value > 0 ? 'forward' : 'reverse',
+                  direction: snapshot.battery.flowValue > 0 ? 'forward' : 'reverse',
                 })
               : nothing}
             ${this.renderFlow({
@@ -409,15 +409,19 @@ export class ZsPowerFlowCard extends LitElement {
         <span>PV do magazynu</span>
         <strong>${formatPower(snapshot.solarToBattery, this._config.decimals ?? 1)}</strong>
       </div>
-      <div class="detail-card">
-        <span>Siec do domu</span>
-        <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
-      </div>
-      <div class="detail-card">
-        <span>Energia w baterii</span>
-        <strong>${formatKwh(snapshot.batteryStoredKwh, 1)}</strong>
-      </div>
-    `;
+        <div class="detail-card">
+          <span>Siec do domu</span>
+          <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Siec do magazynu</span>
+          <strong>${formatPower(snapshot.gridToBattery, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Energia w baterii</span>
+          <strong>${formatKwh(snapshot.batteryStoredKwh, 1)}</strong>
+        </div>
+      `;
 
     if (!advanced) {
       return html`<section class="details simple">${baseCards}</section>`;
@@ -433,6 +437,14 @@ export class ZsPowerFlowCard extends LitElement {
         <div class="detail-card">
           <span>Oddawanie z baterii</span>
           <strong>${formatPower(snapshot.batteryToHome, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Bateria do sieci</span>
+          <strong>${formatPower(snapshot.batteryToGrid, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card ${snapshot.residualPower > 0 ? 'warn' : ''}">
+          <span>${this.describeResidualLabel(snapshot)}</span>
+          <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card metric">
           <span>Dzienna produkcja</span>
@@ -551,6 +563,9 @@ export class ZsPowerFlowCard extends LitElement {
     if (snapshot.gridConnected === false) {
       return 'Praca off-grid';
     }
+    if (snapshot.residualPower > 0) {
+      return 'Bilans czesciowy';
+    }
     if (snapshot.solar.value > snapshot.home.value && snapshot.grid.value < 0) {
       return 'Nadwyzka produkcji';
     }
@@ -571,6 +586,16 @@ export class ZsPowerFlowCard extends LitElement {
     if (snapshot.battery.mode === 'charging') return 'Ladowanie';
     if (snapshot.battery.mode === 'discharging') return 'Rozladowanie';
     return 'Stabilny bufor';
+  }
+
+  private describeResidualLabel(snapshot: PowerFlowSnapshot): string {
+    if (snapshot.residualDirection === 'unassigned_source') {
+      return 'Inne zuzycie / straty';
+    }
+    if (snapshot.residualDirection === 'unassigned_demand') {
+      return 'Brakujace zrodlo / dane';
+    }
+    return 'Bilans pozostaly';
   }
 
   private showMoreInfo(entityId?: string) {
@@ -1190,6 +1215,11 @@ export class ZsPowerFlowCard extends LitElement {
     .detail-card.highlight {
       border-color: color-mix(in srgb, var(--zs-solar) 22%, rgba(255,255,255,0.06));
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    .detail-card.warn {
+      border-color: rgba(251, 191, 36, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.08);
     }
 
     .detail-card.metric {

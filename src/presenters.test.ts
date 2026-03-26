@@ -89,10 +89,13 @@ describe('buildSnapshot', () => {
     );
 
     expect(snapshot.solarToHome).toBeCloseTo(1100);
-    expect(snapshot.gridToHome).toBeCloseTo(2500);
+    expect(snapshot.gridToHome).toBeCloseTo(2100);
     expect(snapshot.batteryToHome).toBeCloseTo(1700);
+    expect(snapshot.gridToBattery).toBeCloseTo(0);
     expect(snapshot.battery.mode).toBe('discharging');
     expect(snapshot.netHomeDemand).toBeCloseTo(3800);
+    expect(snapshot.residualPower).toBeCloseTo(400);
+    expect(snapshot.residualDirection).toBe('unassigned_source');
   });
 
   it('falls back to demo values when entities are missing', () => {
@@ -119,7 +122,52 @@ describe('buildSnapshot', () => {
 
     expect(snapshot.grid.value).toBeCloseTo(1507);
     expect(snapshot.battery.value).toBeCloseTo(-4);
+    expect(snapshot.battery.flowValue).toBe(0);
+    expect(snapshot.battery.mode).toBe('idle');
     expect(formatPower(snapshot.solar.value, 1)).toBe('115 W');
+  });
+
+  it('routes grid import into battery charging when battery is charging', () => {
+    const snapshot = buildSnapshot(
+      {
+        states: {
+          'sensor.solar': { state: '0', attributes: { unit_of_measurement: 'W' } },
+          'sensor.grid': { state: '900', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_power': { state: '-320', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_soc': { state: '41' },
+          'sensor.home': { state: '500', attributes: { unit_of_measurement: 'W' } },
+        },
+      },
+      baseConfig,
+    );
+
+    expect(snapshot.gridToHome).toBeCloseTo(500);
+    expect(snapshot.gridToBattery).toBeCloseTo(320);
+    expect(snapshot.battery.mode).toBe('charging');
+    expect(snapshot.residualPower).toBeCloseTo(80);
+    expect(snapshot.residualDirection).toBe('unassigned_source');
+  });
+
+  it('filters tiny battery power as measurement noise for flow decisions', () => {
+    const snapshot = buildSnapshot(
+      {
+        states: {
+          'sensor.solar': { state: '0', attributes: { unit_of_measurement: 'W' } },
+          'sensor.grid': { state: '773', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_power': { state: '14', attributes: { unit_of_measurement: 'W' } },
+          'sensor.battery_soc': { state: '15' },
+          'sensor.home': { state: '639', attributes: { unit_of_measurement: 'W' } },
+        },
+      },
+      baseConfig,
+    );
+
+    expect(snapshot.battery.value).toBeCloseTo(14);
+    expect(snapshot.battery.flowValue).toBeCloseTo(0);
+    expect(snapshot.battery.mode).toBe('idle');
+    expect(snapshot.gridToHome).toBeCloseTo(639);
+    expect(snapshot.residualPower).toBeCloseTo(134);
+    expect(snapshot.residualDirection).toBe('unassigned_source');
   });
 });
 

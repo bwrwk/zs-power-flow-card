@@ -82,6 +82,7 @@ export class ZsPowerFlowCardEditor extends LitElement {
               ['extended', 'Extended'],
             ], 'Extended pokazuje wiecej kart z przeplywami i energiami dziennymi.')}
             ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals, 'Ile cyfr po przecinku pokazywac dla wartosci mocy.')}
+            ${this.renderNumberField('Prog szumu mocy (W)', 'power_noise_floor_w', config.power_noise_floor_w, 'Male wartosci ponizej tego progu beda ignorowane w kierunku flow, zeby nie pokazywac pozornego wsparcia przy kilku watach. Domyslnie 30 W.')}
           </div>
 
           <div class="toggle-grid">

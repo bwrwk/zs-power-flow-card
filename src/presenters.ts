@@ -105,6 +105,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function applyNoiseFloor(value: number, floor: number): number {
+  return Math.abs(value) < floor ? 0 : value;
+}
+
 function withDisplayPower(valueWatts: number) {
   const absolute = Math.abs(valueWatts);
   if (absolute >= 1000) {
@@ -113,11 +117,12 @@ function withDisplayPower(valueWatts: number) {
   return { displayValue: valueWatts, displayUnit: 'W' as const };
 }
 
-function createNode(label: string, valueWatts: number, accent: string, secondary: string): FlowNodeData {
+function createNode(label: string, valueWatts: number, flowValueWatts: number, accent: string, secondary: string): FlowNodeData {
   const display = withDisplayPower(valueWatts);
   return {
     label,
     value: valueWatts,
+    flowValue: flowValueWatts,
     displayValue: display.displayValue,
     displayUnit: display.displayUnit,
     accent,
@@ -168,40 +173,86 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
   const home = Math.max(0, parsePowerWatts(homeEntity, FALLBACK_VALUES_W.home));
   const grid = (config.invert_grid ? -1 : 1) * gridBase;
   const batteryPower = (config.invert_battery ? -1 : 1) * batteryBase;
+  const noiseFloor = Math.max(0, config.power_noise_floor_w ?? 30);
+  const effectiveGrid = applyNoiseFloor(grid, noiseFloor);
+  const effectiveBatteryPower = applyNoiseFloor(batteryPower, noiseFloor);
 
   const socValue = parseOptionalNumber(socEntity) ?? FALLBACK_VALUES_W.batterySoc;
   const soc = Number.isFinite(socValue) ? clamp(socValue, 0, 100) : null;
   const batteryCapacity = config.battery_capacity_kwh ?? 0;
 
-  const solarToHome = Math.min(solar, home);
-  const remainingSolar = Math.max(0, solar - solarToHome);
-  const solarToBattery = batteryPower < 0 ? Math.min(remainingSolar, Math.abs(batteryPower)) : 0;
-  const solarToGrid = Math.max(0, remainingSolar - solarToBattery);
-  const batteryToHome = batteryPower > 0 ? Math.min(home, batteryPower) : 0;
-  const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
+  let remainingSolarSupply = solar;
+  let remainingGridImport = Math.max(0, effectiveGrid);
+  let remainingBatteryDischarge = Math.max(0, effectiveBatteryPower);
+  let remainingHomeDemand = home;
+  let remainingBatteryCharge = Math.max(0, -effectiveBatteryPower);
+  let remainingGridExport = Math.max(0, -effectiveGrid);
+
+  const solarToHome = Math.min(remainingSolarSupply, remainingHomeDemand);
+  remainingSolarSupply -= solarToHome;
+  remainingHomeDemand -= solarToHome;
+
+  const batteryToHome = Math.min(remainingBatteryDischarge, remainingHomeDemand);
+  remainingBatteryDischarge -= batteryToHome;
+  remainingHomeDemand -= batteryToHome;
+
+  const gridToHome = Math.min(remainingGridImport, remainingHomeDemand);
+  remainingGridImport -= gridToHome;
+  remainingHomeDemand -= gridToHome;
+
+  const solarToBattery = Math.min(remainingSolarSupply, remainingBatteryCharge);
+  remainingSolarSupply -= solarToBattery;
+  remainingBatteryCharge -= solarToBattery;
+
+  const gridToBattery = Math.min(remainingGridImport, remainingBatteryCharge);
+  remainingGridImport -= gridToBattery;
+  remainingBatteryCharge -= gridToBattery;
+
+  const solarToGrid = Math.min(remainingSolarSupply, remainingGridExport);
+  remainingSolarSupply -= solarToGrid;
+  remainingGridExport -= solarToGrid;
+
+  const batteryToGrid = Math.min(remainingBatteryDischarge, remainingGridExport);
+  remainingBatteryDischarge -= batteryToGrid;
+  remainingGridExport -= batteryToGrid;
+
+  const remainingSources = remainingSolarSupply + remainingGridImport + remainingBatteryDischarge;
+  const remainingSinks = remainingHomeDemand + remainingBatteryCharge + remainingGridExport;
+  const residualDelta = remainingSources - remainingSinks;
+  const residualPower = Math.abs(residualDelta);
+  const residualDirection =
+    residualPower < 1
+      ? 'balanced'
+      : residualDelta > 0
+        ? 'unassigned_source'
+        : 'unassigned_demand';
   const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
-  const netHomeDemand = home - solar;
+  const netHomeDemand = Math.max(0, home - solarToHome);
 
   const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
   const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
   const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
 
   return {
-    solar: createNode(config.solar_label ?? 'Produkcja', solar, themeTokens.solar, 'PV'),
-    grid: createNode(config.grid_label ?? 'Siec', grid, themeTokens.grid, grid >= 0 ? 'Import' : 'Eksport'),
+    solar: createNode(config.solar_label ?? 'Produkcja', solar, solar, themeTokens.solar, 'PV'),
+    grid: createNode(config.grid_label ?? 'Siec', grid, effectiveGrid, themeTokens.grid, effectiveGrid >= 0 ? 'Import' : 'Eksport'),
     battery: {
-      ...createNode(config.battery_label ?? 'Magazyn', batteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
+      ...createNode(config.battery_label ?? 'Magazyn', batteryPower, effectiveBatteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
       soc,
-      mode: batteryPower > 0 ? 'discharging' : batteryPower < 0 ? 'charging' : 'idle',
+      mode: effectiveBatteryPower > 0 ? 'discharging' : effectiveBatteryPower < 0 ? 'charging' : 'idle',
     },
-    home: createNode(config.home_label ?? 'Dom', home, themeTokens.home, 'Zuzycie'),
+    home: createNode(config.home_label ?? 'Dom', home, home, themeTokens.home, 'Zuzycie'),
     solarToHome,
     solarToBattery,
     solarToGrid,
     gridToHome,
+    gridToBattery,
     batteryToHome,
+    batteryToGrid,
     batteryStoredKwh,
     netHomeDemand,
+    residualPower,
+    residualDirection,
     gridConnected,
     inverterStatus,
     batteryState,

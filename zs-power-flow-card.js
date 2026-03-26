@@ -153,6 +153,7 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ['extended', 'Extended'],
         ], 'Extended pokazuje wiecej kart z przeplywami i energiami dziennymi.')}
             ${this.renderNumberField('Miejsca po przecinku', 'decimals', config.decimals, 'Ile cyfr po przecinku pokazywac dla wartosci mocy.')}
+            ${this.renderNumberField('Prog szumu mocy (W)', 'power_noise_floor_w', config.power_noise_floor_w, 'Male wartosci ponizej tego progu beda ignorowane w kierunku flow, zeby nie pokazywac pozornego wsparcia przy kilku watach. Domyslnie 30 W.')}
           </div>
 
           <div class="toggle-grid">
@@ -555,6 +556,9 @@ function parseGridConnected(entity) {
 function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
+function applyNoiseFloor(value, floor) {
+    return Math.abs(value) < floor ? 0 : value;
+}
 function withDisplayPower(valueWatts) {
     const absolute = Math.abs(valueWatts);
     if (absolute >= 1000) {
@@ -562,11 +566,12 @@ function withDisplayPower(valueWatts) {
     }
     return { displayValue: valueWatts, displayUnit: 'W' };
 }
-function createNode(label, valueWatts, accent, secondary) {
+function createNode(label, valueWatts, flowValueWatts, accent, secondary) {
     const display = withDisplayPower(valueWatts);
     return {
         label,
         value: valueWatts,
+        flowValue: flowValueWatts,
         displayValue: display.displayValue,
         displayUnit: display.displayUnit,
         accent,
@@ -609,36 +614,73 @@ function buildSnapshot(hass, config) {
     const home = Math.max(0, parsePowerWatts(homeEntity, FALLBACK_VALUES_W.home));
     const grid = (config.invert_grid ? -1 : 1) * gridBase;
     const batteryPower = (config.invert_battery ? -1 : 1) * batteryBase;
+    const noiseFloor = Math.max(0, config.power_noise_floor_w ?? 30);
+    const effectiveGrid = applyNoiseFloor(grid, noiseFloor);
+    const effectiveBatteryPower = applyNoiseFloor(batteryPower, noiseFloor);
     const socValue = parseOptionalNumber(socEntity) ?? FALLBACK_VALUES_W.batterySoc;
     const soc = Number.isFinite(socValue) ? clamp(socValue, 0, 100) : null;
     const batteryCapacity = config.battery_capacity_kwh ?? 0;
-    const solarToHome = Math.min(solar, home);
-    const remainingSolar = Math.max(0, solar - solarToHome);
-    const solarToBattery = batteryPower < 0 ? Math.min(remainingSolar, Math.abs(batteryPower)) : 0;
-    const solarToGrid = Math.max(0, remainingSolar - solarToBattery);
-    const batteryToHome = batteryPower > 0 ? Math.min(home, batteryPower) : 0;
-    const gridToHome = grid > 0 ? Math.min(home, grid) : 0;
+    let remainingSolarSupply = solar;
+    let remainingGridImport = Math.max(0, effectiveGrid);
+    let remainingBatteryDischarge = Math.max(0, effectiveBatteryPower);
+    let remainingHomeDemand = home;
+    let remainingBatteryCharge = Math.max(0, -effectiveBatteryPower);
+    let remainingGridExport = Math.max(0, -effectiveGrid);
+    const solarToHome = Math.min(remainingSolarSupply, remainingHomeDemand);
+    remainingSolarSupply -= solarToHome;
+    remainingHomeDemand -= solarToHome;
+    const batteryToHome = Math.min(remainingBatteryDischarge, remainingHomeDemand);
+    remainingBatteryDischarge -= batteryToHome;
+    remainingHomeDemand -= batteryToHome;
+    const gridToHome = Math.min(remainingGridImport, remainingHomeDemand);
+    remainingGridImport -= gridToHome;
+    remainingHomeDemand -= gridToHome;
+    const solarToBattery = Math.min(remainingSolarSupply, remainingBatteryCharge);
+    remainingSolarSupply -= solarToBattery;
+    remainingBatteryCharge -= solarToBattery;
+    const gridToBattery = Math.min(remainingGridImport, remainingBatteryCharge);
+    remainingGridImport -= gridToBattery;
+    remainingBatteryCharge -= gridToBattery;
+    const solarToGrid = Math.min(remainingSolarSupply, remainingGridExport);
+    remainingSolarSupply -= solarToGrid;
+    remainingGridExport -= solarToGrid;
+    const batteryToGrid = Math.min(remainingBatteryDischarge, remainingGridExport);
+    remainingBatteryDischarge -= batteryToGrid;
+    remainingGridExport -= batteryToGrid;
+    const remainingSources = remainingSolarSupply + remainingGridImport + remainingBatteryDischarge;
+    const remainingSinks = remainingHomeDemand + remainingBatteryCharge + remainingGridExport;
+    const residualDelta = remainingSources - remainingSinks;
+    const residualPower = Math.abs(residualDelta);
+    const residualDirection = residualPower < 1
+        ? 'balanced'
+        : residualDelta > 0
+            ? 'unassigned_source'
+            : 'unassigned_demand';
     const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
-    const netHomeDemand = home - solar;
+    const netHomeDemand = Math.max(0, home - solarToHome);
     const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
     const inverterStatus = parseEntityText(getEntity(hass, config.inverter_status_entity));
     const batteryState = parseEntityText(getEntity(hass, config.battery_state_entity));
     return {
-        solar: createNode(config.solar_label ?? 'Produkcja', solar, themeTokens.solar, 'PV'),
-        grid: createNode(config.grid_label ?? 'Siec', grid, themeTokens.grid, grid >= 0 ? 'Import' : 'Eksport'),
+        solar: createNode(config.solar_label ?? 'Produkcja', solar, solar, themeTokens.solar, 'PV'),
+        grid: createNode(config.grid_label ?? 'Siec', grid, effectiveGrid, themeTokens.grid, effectiveGrid >= 0 ? 'Import' : 'Eksport'),
         battery: {
-            ...createNode(config.battery_label ?? 'Magazyn', batteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
+            ...createNode(config.battery_label ?? 'Magazyn', batteryPower, effectiveBatteryPower, themeTokens.battery, soc === null ? 'Stan nieznany' : `SOC ${soc.toFixed(0)}%`),
             soc,
-            mode: batteryPower > 0 ? 'discharging' : batteryPower < 0 ? 'charging' : 'idle',
+            mode: effectiveBatteryPower > 0 ? 'discharging' : effectiveBatteryPower < 0 ? 'charging' : 'idle',
         },
-        home: createNode(config.home_label ?? 'Dom', home, themeTokens.home, 'Zuzycie'),
+        home: createNode(config.home_label ?? 'Dom', home, home, themeTokens.home, 'Zuzycie'),
         solarToHome,
         solarToBattery,
         solarToGrid,
         gridToHome,
+        gridToBattery,
         batteryToHome,
+        batteryToGrid,
         batteryStoredKwh,
         netHomeDemand,
+        residualPower,
+        residualDirection,
         gridConnected,
         inverterStatus,
         batteryState,
@@ -813,7 +855,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
 
             ${this._config.show_solar
             ? this.renderFlow({
-                power: snapshot.solar.value,
+                power: snapshot.solar.flowValue,
                 color: snapshot.solar.accent,
                 path: this._flowPaths.solar,
                 direction: 'forward',
@@ -821,18 +863,18 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             : A}
             ${this._config.show_grid
             ? this.renderFlow({
-                power: Math.abs(snapshot.grid.value),
+                power: Math.abs(snapshot.grid.flowValue),
                 color: snapshot.grid.accent,
                 path: this._flowPaths.grid,
-                direction: snapshot.grid.value >= 0 ? 'forward' : 'reverse',
+                direction: snapshot.grid.flowValue >= 0 ? 'forward' : 'reverse',
             })
             : A}
             ${this._config.show_battery
             ? this.renderFlow({
-                power: Math.abs(snapshot.battery.value),
+                power: Math.abs(snapshot.battery.flowValue),
                 color: snapshot.battery.accent,
                 path: this._flowPaths.battery,
-                direction: snapshot.battery.value > 0 ? 'forward' : 'reverse',
+                direction: snapshot.battery.flowValue > 0 ? 'forward' : 'reverse',
             })
             : A}
             ${this.renderFlow({
@@ -1051,15 +1093,19 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <span>PV do magazynu</span>
         <strong>${formatPower(snapshot.solarToBattery, this._config.decimals ?? 1)}</strong>
       </div>
-      <div class="detail-card">
-        <span>Siec do domu</span>
-        <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
-      </div>
-      <div class="detail-card">
-        <span>Energia w baterii</span>
-        <strong>${formatKwh(snapshot.batteryStoredKwh, 1)}</strong>
-      </div>
-    `;
+        <div class="detail-card">
+          <span>Siec do domu</span>
+          <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Siec do magazynu</span>
+          <strong>${formatPower(snapshot.gridToBattery, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Energia w baterii</span>
+          <strong>${formatKwh(snapshot.batteryStoredKwh, 1)}</strong>
+        </div>
+      `;
         if (!advanced) {
             return b `<section class="details simple">${baseCards}</section>`;
         }
@@ -1073,6 +1119,14 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <div class="detail-card">
           <span>Oddawanie z baterii</span>
           <strong>${formatPower(snapshot.batteryToHome, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card">
+          <span>Bateria do sieci</span>
+          <strong>${formatPower(snapshot.batteryToGrid, this._config.decimals ?? 1)}</strong>
+        </div>
+        <div class="detail-card ${snapshot.residualPower > 0 ? 'warn' : ''}">
+          <span>${this.describeResidualLabel(snapshot)}</span>
+          <strong>${formatPower(snapshot.residualPower, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card metric">
           <span>Dzienna produkcja</span>
@@ -1182,6 +1236,9 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (snapshot.gridConnected === false) {
             return 'Praca off-grid';
         }
+        if (snapshot.residualPower > 0) {
+            return 'Bilans czesciowy';
+        }
         if (snapshot.solar.value > snapshot.home.value && snapshot.grid.value < 0) {
             return 'Nadwyzka produkcji';
         }
@@ -1204,6 +1261,15 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         if (snapshot.battery.mode === 'discharging')
             return 'Rozladowanie';
         return 'Stabilny bufor';
+    }
+    describeResidualLabel(snapshot) {
+        if (snapshot.residualDirection === 'unassigned_source') {
+            return 'Inne zuzycie / straty';
+        }
+        if (snapshot.residualDirection === 'unassigned_demand') {
+            return 'Brakujace zrodlo / dane';
+        }
+        return 'Bilans pozostaly';
     }
     showMoreInfo(entityId) {
         if (!entityId || !this.hass)
@@ -1821,6 +1887,11 @@ ZsPowerFlowCard.styles = i$3 `
     .detail-card.highlight {
       border-color: color-mix(in srgb, var(--zs-solar) 22%, rgba(255,255,255,0.06));
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+    }
+
+    .detail-card.warn {
+      border-color: rgba(251, 191, 36, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.08);
     }
 
     .detail-card.metric {

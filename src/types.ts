@@ -61,6 +61,7 @@ export interface ZsPowerFlowCardConfig {
   show_pv_breakdown?: boolean;
   invert_grid?: boolean;
   invert_battery?: boolean;
+  power_noise_floor_w?: number;
   decimals?: number;
   solar_label?: string;
   grid_label?: string;
@@ -71,6 +72,7 @@ export interface ZsPowerFlowCardConfig {
 export interface FlowNodeData {
   label: string;
   value: number;
+  flowValue: number;
   displayValue: number;
   displayUnit: 'W' | 'kW';
   accent: string;
@@ -93,9 +95,13 @@ export interface PowerFlowSnapshot {
   solarToBattery: number;
   solarToGrid: number;
   gridToHome: number;
+  gridToBattery: number;
   batteryToHome: number;
+  batteryToGrid: number;
   batteryStoredKwh: number | null;
   netHomeDemand: number;
+  residualPower: number;
+  residualDirection: 'balanced' | 'unassigned_source' | 'unassigned_demand';
   gridConnected: boolean | null;
   inverterStatus: string | null;
   batteryState: string | null;

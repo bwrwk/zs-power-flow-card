@@ -267,6 +267,8 @@ export class ZsPowerFlowCard extends LitElement {
     .shell {
       padding: 24px;
       position: relative;
+      max-width: 1480px;
+      margin: 0 auto;
       background:
         radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 28%),
         radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.08), transparent 30%);
@@ -657,6 +659,68 @@ export class ZsPowerFlowCard extends LitElement {
       .details.simple,
       .details.advanced {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 1180px) {
+      .stage {
+        min-height: 500px;
+      }
+
+      .stage-advanced {
+        min-height: 530px;
+      }
+
+      .top.left {
+        top: 34px;
+        left: 40px;
+      }
+
+      .top.right {
+        top: 34px;
+        right: 40px;
+      }
+
+      .bottom.left {
+        bottom: 34px;
+        left: 40px;
+      }
+
+      .bottom.right {
+        bottom: 34px;
+        right: 40px;
+      }
+
+      .node {
+        width: 208px;
+        padding: 18px;
+      }
+
+      .icon {
+        width: 58px;
+        height: 58px;
+      }
+
+      .meta strong {
+        font-size: 1.5rem;
+      }
+
+      .core {
+        width: 198px;
+        height: 198px;
+      }
+
+      .stage.layout-focus-home .core {
+        width: 220px;
+        height: 220px;
+      }
+
+      .details.simple {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .details.advanced {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
       }
     }
 

@@ -1037,14 +1037,11 @@ function buildSnapshot(hass, config) {
     const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
     const netHomeDemand = Math.max(0, home - solarToHome);
     const currentSourceTotal = solarToHome + gridToHome + batteryToHome;
-    const dailySolarSelfUsed = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) !== null &&
-        parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) !== null
-        ? Math.max(0, (parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) ?? 0) -
-            (parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) ?? 0))
-        : null;
     const dailyHomeValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity));
     const dailyImportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity));
     const dailySolarValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity));
+    const dailyExportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity));
+    const dailySolarSelfUsed = dailySolarValue !== null && dailyExportValue !== null ? Math.max(0, dailySolarValue - dailyExportValue) : null;
     const batteryRuntimeHours = batteryStoredKwh !== null && home > 0 ? batteryStoredKwh / (home / 1000) : null;
     const residualRate = home > 0 ? clamp((residualPower / home) * 100, 0, 100) : null;
     const gridConnected = parseGridConnected(getEntity(hass, config.grid_connected_entity));
@@ -1054,7 +1051,7 @@ function buildSnapshot(hass, config) {
         solar: dailySolarValue,
         home: dailyHomeValue,
         gridImport: dailyImportValue,
-        gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+        gridExport: dailyExportValue,
         batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
         batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
     };
@@ -1214,6 +1211,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         this._stageSize = { width: 640, height: 420 };
         this._flowFrame = 0;
         this._holdTriggered = false;
+        this._observedFlowElements = new Set();
         this.handlePointerUp = () => {
             this.clearHoldTimer();
         };
@@ -1243,6 +1241,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     disconnectedCallback() {
         this._resizeObserver?.disconnect();
         this._resizeObserver = undefined;
+        this._observedFlowElements.clear();
         cancelAnimationFrame(this._flowFrame);
         this.clearHoldTimer();
         super.disconnectedCallback();
@@ -1251,9 +1250,29 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         this.observeFlowLayout();
         this.scheduleFlowPathUpdate();
     }
-    updated() {
+    updated(changedProps) {
+        const changedKeys = new Set(Array.from(changedProps.keys()).map(String));
+        const flowPathsChanged = changedKeys.has('_flowPaths');
+        const stageSizeChanged = changedKeys.has('_stageSize');
+        if (flowPathsChanged || stageSizeChanged) {
+            return;
+        }
         this.observeFlowLayout();
         this.scheduleFlowPathUpdate();
+    }
+    shouldUpdate(changedProps) {
+        const changedKeys = new Set(Array.from(changedProps.keys()).map(String));
+        const flowPathsChanged = changedKeys.has('_flowPaths');
+        const stageSizeChanged = changedKeys.has('_stageSize');
+        const configChanged = changedKeys.has('_config');
+        if (flowPathsChanged || stageSizeChanged || configChanged) {
+            return true;
+        }
+        if (changedKeys.has('hass')) {
+            const previousHass = changedProps.get('hass');
+            return this.hasRelevantHassChange(previousHass, this.hass);
+        }
+        return true;
     }
     render() {
         const snapshot = buildSnapshot(this.hass, this._config);
@@ -1463,10 +1482,22 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     observeFlowLayout() {
         if (!this._resizeObserver)
             return;
-        this._resizeObserver.disconnect();
-        this._resizeObserver.observe(this);
-        const elements = this.renderRoot.querySelectorAll('.stage, .core, .node, .flow-anchor');
-        elements.forEach((element) => this._resizeObserver?.observe(element));
+        const nextElements = new Set();
+        nextElements.add(this);
+        this.renderRoot.querySelectorAll('.stage, .core, .node, .flow-anchor').forEach((element) => {
+            nextElements.add(element);
+        });
+        nextElements.forEach((element) => {
+            if (!this._observedFlowElements.has(element)) {
+                this._resizeObserver?.observe(element);
+            }
+        });
+        this._observedFlowElements.forEach((element) => {
+            if (!nextElements.has(element)) {
+                this._resizeObserver?.unobserve(element);
+            }
+        });
+        this._observedFlowElements = nextElements;
     }
     updateFlowPaths() {
         const stage = this._stageEl;
@@ -1498,9 +1529,53 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             nextStageSize.height !== this._stageSize.height) {
             this._stageSize = nextStageSize;
         }
-        if (JSON.stringify(nextPaths) !== JSON.stringify(this._flowPaths)) {
+        if (nextPaths.solar !== this._flowPaths.solar ||
+            nextPaths.grid !== this._flowPaths.grid ||
+            nextPaths.battery !== this._flowPaths.battery ||
+            nextPaths.home !== this._flowPaths.home) {
             this._flowPaths = nextPaths;
         }
+    }
+    hasRelevantHassChange(previousHass, nextHass) {
+        if (!previousHass || !nextHass)
+            return true;
+        return this.getRelevantEntityIds().some((entityId) => previousHass.states[entityId] !== nextHass.states[entityId]);
+    }
+    getRelevantEntityIds() {
+        return [
+            this._config.solar_entity,
+            this._config.grid_entity,
+            this._config.battery_power_entity,
+            this._config.battery_soc_entity,
+            this._config.home_entity,
+            this._config.grid_connected_entity,
+            this._config.inverter_status_entity,
+            this._config.daily_solar_energy_entity,
+            this._config.daily_home_energy_entity,
+            this._config.daily_grid_import_energy_entity,
+            this._config.daily_grid_export_energy_entity,
+            this._config.daily_battery_charge_energy_entity,
+            this._config.daily_battery_discharge_energy_entity,
+            this._config.battery_state_entity,
+            this._config.battery_soh_entity,
+            this._config.battery_temperature_entity,
+            this._config.inverter_temperature_entity,
+            this._config.device_alarm_entity,
+            this._config.device_fault_entity,
+            this._config.battery_alarm_entity,
+            this._config.battery_fault_entity,
+            this._config.work_mode_entity,
+            this._config.energy_pattern_entity,
+            this._config.pv1_power_entity,
+            this._config.pv2_power_entity,
+            this._config.pv3_power_entity,
+            this._config.load_l1_power_entity,
+            this._config.load_l2_power_entity,
+            this._config.load_l3_power_entity,
+            this._config.grid_l1_power_entity,
+            this._config.grid_l2_power_entity,
+            this._config.grid_l3_power_entity,
+        ].filter((entityId) => Boolean(entityId));
     }
     buildAnchoredPath(fromRect, toRect, stageRect, anchor) {
         if (!fromRect || !toRect)

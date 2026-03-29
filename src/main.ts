@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from 'lit';
+import { LitElement, PropertyValues, css, html, nothing } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import './editor';
 import { buildSnapshot, formatEnergy, formatKwh, formatPower, getThemeTokens, prettifyStatus } from './presenters';
@@ -74,6 +74,7 @@ export class ZsPowerFlowCard extends LitElement {
   private _flowFrame = 0;
   private _holdTimer?: number;
   private _holdTriggered = false;
+  private _observedFlowElements = new Set<Element>();
 
   public static getConfigElement(): HTMLElement {
     return document.createElement('zs-power-flow-card-editor');
@@ -102,6 +103,7 @@ export class ZsPowerFlowCard extends LitElement {
   disconnectedCallback(): void {
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
+    this._observedFlowElements.clear();
     cancelAnimationFrame(this._flowFrame);
     this.clearHoldTimer();
     super.disconnectedCallback();
@@ -112,9 +114,32 @@ export class ZsPowerFlowCard extends LitElement {
     this.scheduleFlowPathUpdate();
   }
 
-  protected updated(): void {
+  protected updated(changedProps: PropertyValues<this>): void {
+    const changedKeys = new Set(Array.from(changedProps.keys()).map(String));
+    const flowPathsChanged = changedKeys.has('_flowPaths');
+    const stageSizeChanged = changedKeys.has('_stageSize');
+    if (flowPathsChanged || stageSizeChanged) {
+      return;
+    }
     this.observeFlowLayout();
     this.scheduleFlowPathUpdate();
+  }
+
+  protected shouldUpdate(changedProps: PropertyValues<this>): boolean {
+    const changedKeys = new Set(Array.from(changedProps.keys()).map(String));
+    const flowPathsChanged = changedKeys.has('_flowPaths');
+    const stageSizeChanged = changedKeys.has('_stageSize');
+    const configChanged = changedKeys.has('_config');
+    if (flowPathsChanged || stageSizeChanged || configChanged) {
+      return true;
+    }
+
+    if (changedKeys.has('hass')) {
+      const previousHass = changedProps.get('hass') as HomeAssistantLike | undefined;
+      return this.hasRelevantHassChange(previousHass, this.hass);
+    }
+
+    return true;
   }
 
   protected render() {
@@ -350,12 +375,26 @@ export class ZsPowerFlowCard extends LitElement {
 
   private observeFlowLayout() {
     if (!this._resizeObserver) return;
+    const nextElements = new Set<Element>();
+    nextElements.add(this);
 
-    this._resizeObserver.disconnect();
-    this._resizeObserver.observe(this);
+    this.renderRoot.querySelectorAll('.stage, .core, .node, .flow-anchor').forEach((element) => {
+      nextElements.add(element);
+    });
 
-    const elements = this.renderRoot.querySelectorAll('.stage, .core, .node, .flow-anchor');
-    elements.forEach((element) => this._resizeObserver?.observe(element));
+    nextElements.forEach((element) => {
+      if (!this._observedFlowElements.has(element)) {
+        this._resizeObserver?.observe(element);
+      }
+    });
+
+    this._observedFlowElements.forEach((element) => {
+      if (!nextElements.has(element)) {
+        this._resizeObserver?.unobserve(element);
+      }
+    });
+
+    this._observedFlowElements = nextElements;
   }
 
   private updateFlowPaths() {
@@ -393,9 +432,57 @@ export class ZsPowerFlowCard extends LitElement {
       this._stageSize = nextStageSize;
     }
 
-    if (JSON.stringify(nextPaths) !== JSON.stringify(this._flowPaths)) {
+    if (
+      nextPaths.solar !== this._flowPaths.solar ||
+      nextPaths.grid !== this._flowPaths.grid ||
+      nextPaths.battery !== this._flowPaths.battery ||
+      nextPaths.home !== this._flowPaths.home
+    ) {
       this._flowPaths = nextPaths;
     }
+  }
+
+  private hasRelevantHassChange(previousHass: HomeAssistantLike | undefined, nextHass: HomeAssistantLike | undefined) {
+    if (!previousHass || !nextHass) return true;
+
+    return this.getRelevantEntityIds().some((entityId) => previousHass.states[entityId] !== nextHass.states[entityId]);
+  }
+
+  private getRelevantEntityIds() {
+    return [
+      this._config.solar_entity,
+      this._config.grid_entity,
+      this._config.battery_power_entity,
+      this._config.battery_soc_entity,
+      this._config.home_entity,
+      this._config.grid_connected_entity,
+      this._config.inverter_status_entity,
+      this._config.daily_solar_energy_entity,
+      this._config.daily_home_energy_entity,
+      this._config.daily_grid_import_energy_entity,
+      this._config.daily_grid_export_energy_entity,
+      this._config.daily_battery_charge_energy_entity,
+      this._config.daily_battery_discharge_energy_entity,
+      this._config.battery_state_entity,
+      this._config.battery_soh_entity,
+      this._config.battery_temperature_entity,
+      this._config.inverter_temperature_entity,
+      this._config.device_alarm_entity,
+      this._config.device_fault_entity,
+      this._config.battery_alarm_entity,
+      this._config.battery_fault_entity,
+      this._config.work_mode_entity,
+      this._config.energy_pattern_entity,
+      this._config.pv1_power_entity,
+      this._config.pv2_power_entity,
+      this._config.pv3_power_entity,
+      this._config.load_l1_power_entity,
+      this._config.load_l2_power_entity,
+      this._config.load_l3_power_entity,
+      this._config.grid_l1_power_entity,
+      this._config.grid_l2_power_entity,
+      this._config.grid_l3_power_entity,
+    ].filter((entityId): entityId is string => Boolean(entityId));
   }
 
   private buildAnchoredPath(

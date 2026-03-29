@@ -6,7 +6,7 @@ To jest autorska implementacja inspirowana ogolnym pomyslem kart typu power flow
 
 ## Status
 
-Wersja `1.0.0` to pierwsze stabilne wydanie:
+Wersja `1.1.0` to pierwsza stabilna iteracja rozwinieta po premierze:
 
 - nowoczesny uklad `solar / grid / battery / home`,
 - animowane flow z poprawiona geometria i stabilnym resize,

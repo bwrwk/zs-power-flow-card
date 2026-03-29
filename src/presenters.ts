@@ -234,18 +234,12 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
   const batteryStoredKwh = soc !== null && batteryCapacity > 0 ? (batteryCapacity * soc) / 100 : null;
   const netHomeDemand = Math.max(0, home - solarToHome);
   const currentSourceTotal = solarToHome + gridToHome + batteryToHome;
-  const dailySolarSelfUsed =
-    parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) !== null &&
-    parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) !== null
-      ? Math.max(
-          0,
-          (parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity)) ?? 0) -
-            (parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)) ?? 0),
-        )
-      : null;
   const dailyHomeValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_home_energy_entity));
   const dailyImportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_import_energy_entity));
   const dailySolarValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_solar_energy_entity));
+  const dailyExportValue = parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity));
+  const dailySolarSelfUsed =
+    dailySolarValue !== null && dailyExportValue !== null ? Math.max(0, dailySolarValue - dailyExportValue) : null;
   const batteryRuntimeHours =
     batteryStoredKwh !== null && home > 0 ? batteryStoredKwh / (home / 1000) : null;
   const residualRate = home > 0 ? clamp((residualPower / home) * 100, 0, 100) : null;
@@ -258,7 +252,7 @@ export function buildSnapshot(hass: HomeAssistantLike | undefined, config: ZsPow
     solar: dailySolarValue,
     home: dailyHomeValue,
     gridImport: dailyImportValue,
-    gridExport: parseOptionalEnergyKwh(getEntity(hass, config.daily_grid_export_energy_entity)),
+    gridExport: dailyExportValue,
     batteryCharge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_charge_energy_entity)),
     batteryDischarge: parseOptionalEnergyKwh(getEntity(hass, config.daily_battery_discharge_energy_entity)),
   };

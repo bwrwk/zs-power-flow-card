@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+- poprawiony widok mobilny dla malych ekranow
+- mniejsze i bardziej pionowe node'y na mobile
+- mniej zbędnych renderow przy zmianach niepowiazanych encji HA
+- mniej agresywne przepinanie ResizeObservera
+- lzejsze przeliczanie flow path i snapshotu danych
+
 ## 1.0.0
 
 - stabilny model przeplywu `solar / grid / battery / home`

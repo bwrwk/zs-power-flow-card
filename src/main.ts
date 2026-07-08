@@ -1,4 +1,4 @@
-import { LitElement, PropertyValues, css, html, nothing } from 'lit';
+﻿import { LitElement, PropertyValues, css, html, nothing } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import './editor';
 import { buildSnapshot, formatEnergy, formatKwh, formatPower, getThemeTokens, prettifyStatus } from './presenters';
@@ -159,7 +159,7 @@ export class ZsPowerFlowCard extends LitElement {
             <div class="hero-copy">
               <p class="eyebrow">ZS Power Flow</p>
               <h2>${this._config.title ?? 'Power Flow'}</h2>
-              <p class="subtitle">${advanced ? 'Widok zaawansowany z dodatkowymi metrykami' : 'Widok prosty z kluczowym przeplywem energii'}</p>
+              <p class="subtitle">${advanced ? 'Widok zaawansowany z dodatkowymi metrykami' : 'Widok prosty z kluczowym przepływem energii'}</p>
             </div>
             <div class="hero-side">
               ${this._config.show_status_bar ? this.renderStatusRail(snapshot, advanced) : nothing}
@@ -291,7 +291,7 @@ export class ZsPowerFlowCard extends LitElement {
         ${consolePreset
           ? html`
               <div class="core-content console">
-                <span class="core-label">Inwerter / ladowarka</span>
+                <span class="core-label">Inwerter / ładowarka</span>
                 <strong>${this.describeBatteryStatus(snapshot)}</strong>
                 <small>${snapshot.inverterStatus ?? (advanced ? coreState.detail : coreState.shortDetail)}</small>
                 <div class="console-core-stats">
@@ -406,7 +406,7 @@ export class ZsPowerFlowCard extends LitElement {
       rows.push({ label: 'Energia', value: formatKwh(snapshot.batteryStoredKwh, 1) });
     }
     if (snapshot.batteryTemperature !== null) {
-      rows.push({ label: 'Temp', value: `${snapshot.batteryTemperature.toFixed(0)}°C` });
+      rows.push({ label: 'Temp.', value: `${snapshot.batteryTemperature.toFixed(0)}°C` });
     }
     return rows.slice(0, 2);
   }
@@ -540,12 +540,20 @@ export class ZsPowerFlowCard extends LitElement {
       coreBottomRight: stage.querySelector<HTMLElement>('.core-anchor.bottom-right')?.getBoundingClientRect(),
     };
 
-    const nextPaths = {
-      solar: this.buildAnchoredPath(anchors.solar, anchors.coreTopLeft, stageRect, 'left'),
-      grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopRight, stageRect, 'right'),
-      battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
-      home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
-    };
+    const nextPaths =
+      this._config.visual_preset === 'console'
+        ? {
+            solar: this.buildAnchoredPath(anchors.solar, anchors.coreBottomLeft, stageRect, 'bottom-left'),
+            grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopLeft, stageRect, 'left'),
+            battery: this.buildAnchoredPath(anchors.coreBottomRight, anchors.battery, stageRect, 'bottom-right'),
+            home: this.buildAnchoredPath(anchors.coreTopRight, anchors.home, stageRect, 'right'),
+          }
+        : {
+            solar: this.buildAnchoredPath(anchors.solar, anchors.coreTopLeft, stageRect, 'left'),
+            grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopRight, stageRect, 'right'),
+            battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
+            home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
+          };
 
     if (
       nextStageSize.width !== this._stageSize.width ||
@@ -639,8 +647,11 @@ export class ZsPowerFlowCard extends LitElement {
     to: { x: number; y: number },
     anchor: 'left' | 'right' | 'bottom-left' | 'bottom-right',
   ) {
-    if (anchor === 'left') {
-      const midX = Math.max(from.x + 34, to.x - 48);
+    const horizontalDirection = to.x >= from.x ? 1 : -1;
+    const horizontalGap = Math.abs(to.x - from.x);
+    const midX = from.x + horizontalDirection * Math.max(34, horizontalGap * 0.52);
+
+    if (anchor === 'left' || anchor === 'right') {
       return this.buildRoundedPolylinePath(
         [
           from,
@@ -652,41 +663,28 @@ export class ZsPowerFlowCard extends LitElement {
       );
     }
 
-    if (anchor === 'right') {
-      const midX = Math.max(from.x + 34, to.x - 54);
+    if (anchor === 'bottom-left' || anchor === 'bottom-right') {
+      const lowerMidX = from.x + horizontalDirection * Math.max(30, horizontalGap * 0.5);
       return this.buildRoundedPolylinePath(
         [
           from,
-          { x: midX, y: from.y },
-          { x: midX, y: to.y },
+          { x: lowerMidX, y: from.y },
+          { x: lowerMidX, y: to.y },
           to,
         ],
         18,
       );
     }
 
-    if (anchor === 'bottom-left') {
-      const midY = from.y - Math.max(34, Math.abs(from.y - to.y) * 0.45);
-      return this.buildRoundedPolylinePath(
-        [
-          from,
-          { x: from.x, y: midY },
-          { x: to.x, y: midY },
-          to,
-        ],
-        16,
-      );
-    }
-
-    const midX = from.x + Math.max(42, Math.abs(to.x - from.x) * 0.4);
+    const fallbackMidX = from.x + horizontalDirection * Math.max(34, horizontalGap * 0.52);
     return this.buildRoundedPolylinePath(
       [
         from,
-        { x: midX, y: from.y },
-        { x: midX, y: to.y },
+        { x: fallbackMidX, y: from.y },
+        { x: fallbackMidX, y: to.y },
         to,
       ],
-      20,
+      18,
     );
   }
 
@@ -763,11 +761,11 @@ export class ZsPowerFlowCard extends LitElement {
         <strong>${formatPower(snapshot.solarToBattery, this._config.decimals ?? 1)}</strong>
       </div>
         <div class="detail-card">
-          <span>Siec do domu</span>
+        <span>Sieć do domu</span>
           <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card">
-          <span>Siec do magazynu</span>
+          <span>Sieć do magazynu</span>
           <strong>${formatPower(snapshot.gridToBattery, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card">
@@ -811,7 +809,7 @@ export class ZsPowerFlowCard extends LitElement {
           <strong>${formatKwh(snapshot.dailyEnergy.solar, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Dzienne zuzycie</span>
+          <span>Dzienne zużycie</span>
           <strong>${formatKwh(snapshot.dailyEnergy.home, 1)}</strong>
         </div>
         <div class="detail-card metric">
@@ -823,11 +821,11 @@ export class ZsPowerFlowCard extends LitElement {
           <strong>${formatKwh(snapshot.dailyEnergy.gridExport, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Ladowanie baterii dzisiaj</span>
+          <span>Ładowanie baterii dzisiaj</span>
           <strong>${formatKwh(snapshot.dailyEnergy.batteryCharge, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Rozladowanie baterii dzisiaj</span>
+          <span>Rozładowanie baterii dzisiaj</span>
           <strong>${formatKwh(snapshot.dailyEnergy.batteryDischarge, 1)}</strong>
         </div>
       </section>
@@ -848,7 +846,7 @@ export class ZsPowerFlowCard extends LitElement {
           <small>${prettifyStatus(snapshot.batteryState) ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
-          <span>Tryb polaczenia</span>
+          <span>Tryb połączenia</span>
           <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
         </div>
@@ -862,17 +860,17 @@ export class ZsPowerFlowCard extends LitElement {
         <div class="analytics-card kpi">
           <span>Autokonsumpcja dzisiaj</span>
           <strong>${this.formatPercent(snapshot.analytics.selfConsumptionRate)}</strong>
-          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udzial energii PV zuzytej lokalnie'}</small>
+          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udział energii PV zużytej lokalnie'}</small>
         </div>
         <div class="analytics-card kpi">
-          <span>Samowystarczalnosc dzisiaj</span>
+          <span>Samowystarczalność dzisiaj</span>
           <strong>${this.formatPercent(snapshot.analytics.selfSufficiencyRate)}</strong>
-          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udzial zuzycia pokrytego bez importu'}</small>
+          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udział zużycia pokrytego bez importu'}</small>
         </div>
         <div class="analytics-card kpi">
           <span>Bufor baterii</span>
           <strong>${this.formatHours(snapshot.analytics.batteryRuntimeHours)}</strong>
-          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemnosci lub SOC' : 'Szacowany czas pokrycia aktualnego obciazenia'}</small>
+          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemności lub SOC' : 'Szacowany czas pokrycia aktualnego obciążenia'}</small>
         </div>
         <div class="analytics-card kpi">
           <span>Reszta bilansu</span>
@@ -908,7 +906,7 @@ export class ZsPowerFlowCard extends LitElement {
     return html`
       <section class="breakdown-grid">
         ${showPv ? this.renderBreakdownCard('MPPT / PV', snapshot.pvBreakdown) : nothing}
-        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciazenia', snapshot.loadPhaseBreakdown) : nothing}
+        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciążenia', snapshot.loadPhaseBreakdown) : nothing}
         ${showGridPhases ? this.renderBreakdownCard('Fazy sieci', snapshot.gridPhaseBreakdown) : nothing}
       </section>
     `;
@@ -949,7 +947,7 @@ export class ZsPowerFlowCard extends LitElement {
           <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
         </div>
         <div class=${`health-card ${deviceTone}`.trim()}>
-          <span>Alarm urzadzenia</span>
+          <span>Alarm urządzenia</span>
           <strong>${snapshot.deviceAlarm ?? '--'}</strong>
           <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
         </div>
@@ -967,10 +965,10 @@ export class ZsPowerFlowCard extends LitElement {
       return 'Praca off-grid';
     }
     if (snapshot.residualPower > 0) {
-      return 'Bilans czesciowy';
+      return 'Bilans częściowy';
     }
     if (snapshot.solar.value > snapshot.home.value && snapshot.grid.value < 0) {
-      return 'Nadwyzka produkcji';
+      return 'Nadwyżka produkcji';
     }
     if (snapshot.grid.value > 0 && snapshot.solar.value < snapshot.home.value) {
       return 'Wsparcie z sieci';
@@ -979,26 +977,26 @@ export class ZsPowerFlowCard extends LitElement {
       return 'Praca z magazynu';
     }
     if (snapshot.battery.mode === 'charging') {
-      return 'Ladowanie magazynu';
+      return 'Ładowanie magazynu';
     }
-    return 'Przeplyw stabilny';
+    return 'Przepływ stabilny';
   }
 
   private describeBatteryStatus(snapshot: PowerFlowSnapshot): string {
     if (snapshot.batteryState) return prettifyStatus(snapshot.batteryState) ?? snapshot.batteryState;
-    if (snapshot.battery.mode === 'charging') return 'Ladowanie';
-    if (snapshot.battery.mode === 'discharging') return 'Rozladowanie';
+    if (snapshot.battery.mode === 'charging') return 'Ładowanie';
+    if (snapshot.battery.mode === 'discharging') return 'Rozładowanie';
     return 'Stabilny bufor';
   }
 
   private describeResidualLabel(snapshot: PowerFlowSnapshot): string {
     if (snapshot.residualDirection === 'unassigned_source') {
-      return 'Inne zuzycie / straty';
+      return 'Inne zużycie / straty';
     }
     if (snapshot.residualDirection === 'unassigned_demand') {
-      return 'Brakujace zrodlo / dane';
+      return 'Brakujące źródło / dane';
     }
-    return 'Bilans pozostaly';
+    return 'Bilans pozostały';
   }
 
   private getCoreState(snapshot: PowerFlowSnapshot) {
@@ -1007,7 +1005,7 @@ export class ZsPowerFlowCard extends LitElement {
         key: 'solar_to_home',
         label: snapshot.gridConnected === false ? 'Zasilanie off-grid' : 'Dom pokryty z PV',
         value: snapshot.solarToHome,
-        detail: snapshot.gridConnected === false ? 'energia lokalna zasila odbiory' : 'autokonsumpcja bezposrednia',
+        detail: snapshot.gridConnected === false ? 'energia lokalna zasila odbiory' : 'autokonsumpcja bezpośrednia',
         shortDetail: 'autokonsumpcja',
         priority: 30,
       },
@@ -1015,23 +1013,23 @@ export class ZsPowerFlowCard extends LitElement {
         key: 'grid_to_home',
         label: 'Import z sieci',
         value: snapshot.gridToHome,
-        detail: 'siec wspiera aktualne zuzycie domu',
+        detail: 'sieć wspiera aktualne zużycie domu',
         shortDetail: 'wsparcie domu',
         priority: 90,
       },
       {
         key: 'solar_to_battery',
-        label: 'Ladowanie magazynu',
+        label: 'Ładowanie magazynu',
         value: snapshot.solarToBattery,
-        detail: 'nadwyzka PV laduje baterie',
-        shortDetail: 'z nadwyzki PV',
+        detail: 'nadwyżka PV ładuje baterię',
+        shortDetail: 'z nadwyżki PV',
         priority: 80,
       },
       {
         key: 'grid_to_battery',
-        label: 'Ladowanie magazynu',
+        label: 'Ładowanie magazynu',
         value: snapshot.gridToBattery,
-        detail: 'siec laduje magazyn energii',
+        detail: 'sieć ładuje magazyn energii',
         shortDetail: 'z sieci',
         priority: 100,
       },
@@ -1047,8 +1045,8 @@ export class ZsPowerFlowCard extends LitElement {
         key: 'solar_to_grid',
         label: 'Eksport do sieci',
         value: snapshot.solarToGrid,
-        detail: 'nadwyzka produkcji oddawana do sieci',
-        shortDetail: 'nadwyzka produkcji',
+        detail: 'nadwyżka produkcji oddawana do sieci',
+        shortDetail: 'nadwyżka produkcji',
         priority: 95,
       },
       {
@@ -1072,9 +1070,9 @@ export class ZsPowerFlowCard extends LitElement {
 
     return {
       key: 'idle',
-      label: 'Przeplyw stabilny',
+      label: 'Przepływ stabilny',
       value: 0,
-      detail: 'brak dominujacego przeplywu w tej chwili',
+      detail: 'brak dominującego przepływu w tej chwili',
       shortDetail: 'stan stabilny',
     };
   }
@@ -1439,9 +1437,9 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .preset-console .node-anchor.battery {
-      left: calc(50% - 4px);
+      left: -2px;
       right: auto;
-      top: -2px;
+      top: calc(50% - 4px);
     }
 
     .preset-console .node-anchor.home {
@@ -1471,23 +1469,23 @@ export class ZsPowerFlowCard extends LitElement {
 
     .preset-console .core-anchor.top-left {
       left: -2px;
-      top: 76%;
+      top: 28%;
     }
 
     .preset-console .core-anchor.top-right {
-      left: -2px;
-      right: auto;
-      top: 38%;
+      right: -2px;
+      left: auto;
+      top: 28%;
     }
 
     .preset-console .core-anchor.bottom-left {
-      left: calc(50% - 4px);
-      bottom: -2px;
+      left: -2px;
+      bottom: 28%;
     }
 
     .preset-console .core-anchor.bottom-right {
       right: -2px;
-      top: calc(50% - 4px);
+      top: 72%;
     }
 
     .stage.layout-focus-home .core {

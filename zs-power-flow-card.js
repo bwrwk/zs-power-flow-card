@@ -1291,7 +1291,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             <div class="hero-copy">
               <p class="eyebrow">ZS Power Flow</p>
               <h2>${this._config.title ?? 'Power Flow'}</h2>
-              <p class="subtitle">${advanced ? 'Widok zaawansowany z dodatkowymi metrykami' : 'Widok prosty z kluczowym przeplywem energii'}</p>
+              <p class="subtitle">${advanced ? 'Widok zaawansowany z dodatkowymi metrykami' : 'Widok prosty z kluczowym przepływem energii'}</p>
             </div>
             <div class="hero-side">
               ${this._config.show_status_bar ? this.renderStatusRail(snapshot, advanced) : A}
@@ -1391,7 +1391,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         ${consolePreset
             ? b `
               <div class="core-content console">
-                <span class="core-label">Inwerter / ladowarka</span>
+                <span class="core-label">Inwerter / ładowarka</span>
                 <strong>${this.describeBatteryStatus(snapshot)}</strong>
                 <small>${snapshot.inverterStatus ?? (advanced ? coreState.detail : coreState.shortDetail)}</small>
                 <div class="console-core-stats">
@@ -1487,7 +1487,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             rows.push({ label: 'Energia', value: formatKwh(snapshot.batteryStoredKwh, 1) });
         }
         if (snapshot.batteryTemperature !== null) {
-            rows.push({ label: 'Temp', value: `${snapshot.batteryTemperature.toFixed(0)}°C` });
+            rows.push({ label: 'Temp.', value: `${snapshot.batteryTemperature.toFixed(0)}°C` });
         }
         return rows.slice(0, 2);
     }
@@ -1601,12 +1601,19 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             coreBottomLeft: stage.querySelector('.core-anchor.bottom-left')?.getBoundingClientRect(),
             coreBottomRight: stage.querySelector('.core-anchor.bottom-right')?.getBoundingClientRect(),
         };
-        const nextPaths = {
-            solar: this.buildAnchoredPath(anchors.solar, anchors.coreTopLeft, stageRect, 'left'),
-            grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopRight, stageRect, 'right'),
-            battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
-            home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
-        };
+        const nextPaths = this._config.visual_preset === 'console'
+            ? {
+                solar: this.buildAnchoredPath(anchors.solar, anchors.coreBottomLeft, stageRect, 'bottom-left'),
+                grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopLeft, stageRect, 'left'),
+                battery: this.buildAnchoredPath(anchors.coreBottomRight, anchors.battery, stageRect, 'bottom-right'),
+                home: this.buildAnchoredPath(anchors.coreTopRight, anchors.home, stageRect, 'right'),
+            }
+            : {
+                solar: this.buildAnchoredPath(anchors.solar, anchors.coreTopLeft, stageRect, 'left'),
+                grid: this.buildAnchoredPath(anchors.grid, anchors.coreTopRight, stageRect, 'right'),
+                battery: this.buildAnchoredPath(anchors.battery, anchors.coreBottomLeft, stageRect, 'bottom-left'),
+                home: this.buildAnchoredPath(anchors.coreBottomRight, anchors.home, stageRect, 'bottom-right'),
+            };
         if (nextStageSize.width !== this._stageSize.width ||
             nextStageSize.height !== this._stageSize.height) {
             this._stageSize = nextStageSize;
@@ -1678,8 +1685,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         return `M ${fromPoint.x.toFixed(1)} ${fromPoint.y.toFixed(1)} C ${control1.x.toFixed(1)} ${control1.y.toFixed(1)}, ${control2.x.toFixed(1)} ${control2.y.toFixed(1)}, ${toPoint.x.toFixed(1)} ${toPoint.y.toFixed(1)}`;
     }
     buildConsoleAnchoredPath(from, to, anchor) {
-        if (anchor === 'left') {
-            const midX = Math.max(from.x + 34, to.x - 48);
+        const horizontalDirection = to.x >= from.x ? 1 : -1;
+        const horizontalGap = Math.abs(to.x - from.x);
+        const midX = from.x + horizontalDirection * Math.max(34, horizontalGap * 0.52);
+        if (anchor === 'left' || anchor === 'right') {
             return this.buildRoundedPolylinePath([
                 from,
                 { x: midX, y: from.y },
@@ -1687,31 +1696,22 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
                 to,
             ], 18);
         }
-        if (anchor === 'right') {
-            const midX = Math.max(from.x + 34, to.x - 54);
+        if (anchor === 'bottom-left' || anchor === 'bottom-right') {
+            const lowerMidX = from.x + horizontalDirection * Math.max(30, horizontalGap * 0.5);
             return this.buildRoundedPolylinePath([
                 from,
-                { x: midX, y: from.y },
-                { x: midX, y: to.y },
+                { x: lowerMidX, y: from.y },
+                { x: lowerMidX, y: to.y },
                 to,
             ], 18);
         }
-        if (anchor === 'bottom-left') {
-            const midY = from.y - Math.max(34, Math.abs(from.y - to.y) * 0.45);
-            return this.buildRoundedPolylinePath([
-                from,
-                { x: from.x, y: midY },
-                { x: to.x, y: midY },
-                to,
-            ], 16);
-        }
-        const midX = from.x + Math.max(42, Math.abs(to.x - from.x) * 0.4);
+        const fallbackMidX = from.x + horizontalDirection * Math.max(34, horizontalGap * 0.52);
         return this.buildRoundedPolylinePath([
             from,
-            { x: midX, y: from.y },
-            { x: midX, y: to.y },
+            { x: fallbackMidX, y: from.y },
+            { x: fallbackMidX, y: to.y },
             to,
-        ], 20);
+        ], 18);
     }
     buildRoundedPolylinePath(points, radius) {
         if (points.length < 2)
@@ -1772,11 +1772,11 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <strong>${formatPower(snapshot.solarToBattery, this._config.decimals ?? 1)}</strong>
       </div>
         <div class="detail-card">
-          <span>Siec do domu</span>
+        <span>Sieć do domu</span>
           <strong>${formatPower(snapshot.gridToHome, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card">
-          <span>Siec do magazynu</span>
+          <span>Sieć do magazynu</span>
           <strong>${formatPower(snapshot.gridToBattery, this._config.decimals ?? 1)}</strong>
         </div>
         <div class="detail-card">
@@ -1816,7 +1816,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <strong>${formatKwh(snapshot.dailyEnergy.solar, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Dzienne zuzycie</span>
+          <span>Dzienne zużycie</span>
           <strong>${formatKwh(snapshot.dailyEnergy.home, 1)}</strong>
         </div>
         <div class="detail-card metric">
@@ -1828,11 +1828,11 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <strong>${formatKwh(snapshot.dailyEnergy.gridExport, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Ladowanie baterii dzisiaj</span>
+          <span>Ładowanie baterii dzisiaj</span>
           <strong>${formatKwh(snapshot.dailyEnergy.batteryCharge, 1)}</strong>
         </div>
         <div class="detail-card metric">
-          <span>Rozladowanie baterii dzisiaj</span>
+          <span>Rozładowanie baterii dzisiaj</span>
           <strong>${formatKwh(snapshot.dailyEnergy.batteryDischarge, 1)}</strong>
         </div>
       </section>
@@ -1852,7 +1852,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <small>${prettifyStatus(snapshot.batteryState) ?? (snapshot.battery.soc === null ? 'SOC nieznany' : `SOC ${snapshot.battery.soc.toFixed(0)}%`)}</small>
         </div>
         <div class="rail-card">
-          <span>Tryb polaczenia</span>
+          <span>Tryb połączenia</span>
           <strong>${snapshot.gridConnected === null ? 'Nieznany' : snapshot.gridConnected ? 'On-grid' : 'Off-grid'}</strong>
           <small>${snapshot.grid.value >= 0 ? 'Import z sieci' : 'Eksport do sieci'}</small>
         </div>
@@ -1865,17 +1865,17 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <div class="analytics-card kpi">
           <span>Autokonsumpcja dzisiaj</span>
           <strong>${this.formatPercent(snapshot.analytics.selfConsumptionRate)}</strong>
-          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udzial energii PV zuzytej lokalnie'}</small>
+          <small>${snapshot.dailyEnergy.solar === null ? 'Brak energii dziennej PV' : 'Udział energii PV zużytej lokalnie'}</small>
         </div>
         <div class="analytics-card kpi">
-          <span>Samowystarczalnosc dzisiaj</span>
+          <span>Samowystarczalność dzisiaj</span>
           <strong>${this.formatPercent(snapshot.analytics.selfSufficiencyRate)}</strong>
-          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udzial zuzycia pokrytego bez importu'}</small>
+          <small>${snapshot.dailyEnergy.home === null ? 'Brak energii dziennej domu' : 'Udział zużycia pokrytego bez importu'}</small>
         </div>
         <div class="analytics-card kpi">
           <span>Bufor baterii</span>
           <strong>${this.formatHours(snapshot.analytics.batteryRuntimeHours)}</strong>
-          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemnosci lub SOC' : 'Szacowany czas pokrycia aktualnego obciazenia'}</small>
+          <small>${snapshot.batteryStoredKwh === null ? 'Brak pojemności lub SOC' : 'Szacowany czas pokrycia aktualnego obciążenia'}</small>
         </div>
         <div class="analytics-card kpi">
           <span>Reszta bilansu</span>
@@ -1908,7 +1908,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         return b `
       <section class="breakdown-grid">
         ${showPv ? this.renderBreakdownCard('MPPT / PV', snapshot.pvBreakdown) : A}
-        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciazenia', snapshot.loadPhaseBreakdown) : A}
+        ${showLoadPhases ? this.renderBreakdownCard('Fazy obciążenia', snapshot.loadPhaseBreakdown) : A}
         ${showGridPhases ? this.renderBreakdownCard('Fazy sieci', snapshot.gridPhaseBreakdown) : A}
       </section>
     `;
@@ -1944,7 +1944,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <small>${snapshot.inverterStatus ?? 'Brak statusu'}</small>
         </div>
         <div class=${`health-card ${deviceTone}`.trim()}>
-          <span>Alarm urzadzenia</span>
+          <span>Alarm urządzenia</span>
           <strong>${snapshot.deviceAlarm ?? '--'}</strong>
           <small>Fault: ${snapshot.deviceFault ?? '--'}</small>
         </div>
@@ -1961,10 +1961,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             return 'Praca off-grid';
         }
         if (snapshot.residualPower > 0) {
-            return 'Bilans czesciowy';
+            return 'Bilans częściowy';
         }
         if (snapshot.solar.value > snapshot.home.value && snapshot.grid.value < 0) {
-            return 'Nadwyzka produkcji';
+            return 'Nadwyżka produkcji';
         }
         if (snapshot.grid.value > 0 && snapshot.solar.value < snapshot.home.value) {
             return 'Wsparcie z sieci';
@@ -1973,27 +1973,27 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             return 'Praca z magazynu';
         }
         if (snapshot.battery.mode === 'charging') {
-            return 'Ladowanie magazynu';
+            return 'Ładowanie magazynu';
         }
-        return 'Przeplyw stabilny';
+        return 'Przepływ stabilny';
     }
     describeBatteryStatus(snapshot) {
         if (snapshot.batteryState)
             return prettifyStatus(snapshot.batteryState) ?? snapshot.batteryState;
         if (snapshot.battery.mode === 'charging')
-            return 'Ladowanie';
+            return 'Ładowanie';
         if (snapshot.battery.mode === 'discharging')
-            return 'Rozladowanie';
+            return 'Rozładowanie';
         return 'Stabilny bufor';
     }
     describeResidualLabel(snapshot) {
         if (snapshot.residualDirection === 'unassigned_source') {
-            return 'Inne zuzycie / straty';
+            return 'Inne zużycie / straty';
         }
         if (snapshot.residualDirection === 'unassigned_demand') {
-            return 'Brakujace zrodlo / dane';
+            return 'Brakujące źródło / dane';
         }
-        return 'Bilans pozostaly';
+        return 'Bilans pozostały';
     }
     getCoreState(snapshot) {
         const candidates = [
@@ -2001,7 +2001,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
                 key: 'solar_to_home',
                 label: snapshot.gridConnected === false ? 'Zasilanie off-grid' : 'Dom pokryty z PV',
                 value: snapshot.solarToHome,
-                detail: snapshot.gridConnected === false ? 'energia lokalna zasila odbiory' : 'autokonsumpcja bezposrednia',
+                detail: snapshot.gridConnected === false ? 'energia lokalna zasila odbiory' : 'autokonsumpcja bezpośrednia',
                 shortDetail: 'autokonsumpcja',
                 priority: 30,
             },
@@ -2009,23 +2009,23 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
                 key: 'grid_to_home',
                 label: 'Import z sieci',
                 value: snapshot.gridToHome,
-                detail: 'siec wspiera aktualne zuzycie domu',
+                detail: 'sieć wspiera aktualne zużycie domu',
                 shortDetail: 'wsparcie domu',
                 priority: 90,
             },
             {
                 key: 'solar_to_battery',
-                label: 'Ladowanie magazynu',
+                label: 'Ładowanie magazynu',
                 value: snapshot.solarToBattery,
-                detail: 'nadwyzka PV laduje baterie',
-                shortDetail: 'z nadwyzki PV',
+                detail: 'nadwyżka PV ładuje baterię',
+                shortDetail: 'z nadwyżki PV',
                 priority: 80,
             },
             {
                 key: 'grid_to_battery',
-                label: 'Ladowanie magazynu',
+                label: 'Ładowanie magazynu',
                 value: snapshot.gridToBattery,
-                detail: 'siec laduje magazyn energii',
+                detail: 'sieć ładuje magazyn energii',
                 shortDetail: 'z sieci',
                 priority: 100,
             },
@@ -2041,8 +2041,8 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
                 key: 'solar_to_grid',
                 label: 'Eksport do sieci',
                 value: snapshot.solarToGrid,
-                detail: 'nadwyzka produkcji oddawana do sieci',
-                shortDetail: 'nadwyzka produkcji',
+                detail: 'nadwyżka produkcji oddawana do sieci',
+                shortDetail: 'nadwyżka produkcji',
                 priority: 95,
             },
             {
@@ -2066,9 +2066,9 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             return dominant;
         return {
             key: 'idle',
-            label: 'Przeplyw stabilny',
+            label: 'Przepływ stabilny',
             value: 0,
-            detail: 'brak dominujacego przeplywu w tej chwili',
+            detail: 'brak dominującego przepływu w tej chwili',
             shortDetail: 'stan stabilny',
         };
     }
@@ -2418,9 +2418,9 @@ ZsPowerFlowCard.styles = i$3 `
     }
 
     .preset-console .node-anchor.battery {
-      left: calc(50% - 4px);
+      left: -2px;
       right: auto;
-      top: -2px;
+      top: calc(50% - 4px);
     }
 
     .preset-console .node-anchor.home {
@@ -2450,23 +2450,23 @@ ZsPowerFlowCard.styles = i$3 `
 
     .preset-console .core-anchor.top-left {
       left: -2px;
-      top: 76%;
+      top: 28%;
     }
 
     .preset-console .core-anchor.top-right {
-      left: -2px;
-      right: auto;
-      top: 38%;
+      right: -2px;
+      left: auto;
+      top: 28%;
     }
 
     .preset-console .core-anchor.bottom-left {
-      left: calc(50% - 4px);
-      bottom: -2px;
+      left: -2px;
+      bottom: 28%;
     }
 
     .preset-console .core-anchor.bottom-right {
       right: -2px;
-      top: calc(50% - 4px);
+      top: 72%;
     }
 
     .stage.layout-focus-home .core {

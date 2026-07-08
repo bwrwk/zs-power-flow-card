@@ -1324,6 +1324,9 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .stage.preset-console {
+      --console-cluster-width: 1120px;
+      --console-side-offset: max(30px, calc(50% - (var(--console-cluster-width) / 2)));
+      --console-home-offset: max(30px, calc(50% - (var(--console-cluster-width) / 2)));
       min-height: 500px;
       background:
         radial-gradient(circle at 50% 12%, rgba(32, 133, 255, 0.12), transparent 28%),
@@ -1494,15 +1497,15 @@ export class ZsPowerFlowCard extends LitElement {
 
     .preset-console .core {
       inset: 34% auto auto 50%;
-      width: min(34vw, 340px);
-      min-width: 250px;
-      height: 150px;
+      width: min(36vw, 388px);
+      min-width: 300px;
+      height: 156px;
       border-radius: 24px;
     }
 
     .preset-console.stage.layout-focus-home .core {
-      width: min(36vw, 360px);
-      height: 158px;
+      width: min(38vw, 408px);
+      height: 162px;
     }
 
     .core-shield {
@@ -1659,7 +1662,7 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .preset-console .node {
-      width: 186px;
+      width: 218px;
       padding: 14px 16px;
       border-radius: 18px;
       background: linear-gradient(180deg, rgba(7, 40, 102, 0.92), rgba(3, 22, 62, 0.96));
@@ -1676,27 +1679,27 @@ export class ZsPowerFlowCard extends LitElement {
 
     .preset-console .console-grid {
       top: 30px;
-      left: 30px;
+      left: var(--console-side-offset);
     }
 
     .preset-console .console-solar {
-      left: 30px;
-      bottom: 40px;
+      left: var(--console-side-offset);
+      bottom: 28px;
     }
 
     .preset-console .console-battery {
       left: 50%;
       bottom: 30px;
       transform: translateX(-50%);
-      width: min(30vw, 240px);
-      min-width: 188px;
+      width: min(28vw, 274px);
+      min-width: 224px;
     }
 
     .preset-console .console-home {
       top: 50%;
-      right: 30px;
+      right: var(--console-home-offset);
       transform: translateY(-50%);
-      width: 196px;
+      width: 230px;
     }
 
     .preset-console .node:hover {

@@ -81,7 +81,8 @@ export class ZsPowerFlowCardEditor extends LitElement {
               ['default', 'Default'],
               ['compact', 'Compact'],
               ['analytics', 'Analytics'],
-            ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
+              ['console', 'Console'],
+            ], 'Default jest zbalansowany, Compact bardziej zwarty, Analytics robi wiecej miejsca na dane pomocnicze, a Console nawiazuje do prostych ekranow inwertera i paneli HMI.')}
             ${this.renderSelectField('Styl flow', 'flow_style', config.flow_style ?? 'soft', [
               ['soft', 'Soft'],
               ['beam', 'Beam'],

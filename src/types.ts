@@ -2,7 +2,7 @@ export type FlowTheme = 'aurora' | 'graphite' | 'sunset';
 export type FlowLayout = 'balanced' | 'focus-home';
 export type DetailsMode = 'summary' | 'extended';
 export type ViewMode = 'simple' | 'advanced';
-export type VisualPreset = 'default' | 'compact' | 'analytics';
+export type VisualPreset = 'default' | 'compact' | 'analytics' | 'console';
 export type FlowStyle = 'soft' | 'beam' | 'pulse';
 export type CardActionType = 'more-info' | 'navigate' | 'url' | 'none';
 

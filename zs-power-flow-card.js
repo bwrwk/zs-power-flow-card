@@ -146,7 +146,8 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ['default', 'Default'],
             ['compact', 'Compact'],
             ['analytics', 'Analytics'],
-        ], 'Default jest zbalansowany, Compact bardziej zwarty, a Analytics robi wiecej miejsca na dane pomocnicze.')}
+            ['console', 'Console'],
+        ], 'Default jest zbalansowany, Compact bardziej zwarty, Analytics robi wiecej miejsca na dane pomocnicze, a Console nawiazuje do prostych ekranow inwertera i paneli HMI.')}
             ${this.renderSelectField('Styl flow', 'flow_style', config.flow_style ?? 'soft', [
             ['soft', 'Soft'],
             ['beam', 'Beam'],
@@ -1303,11 +1304,17 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             <div class="ambient ambient-b"></div>
             <div class="grid-lines"></div>
 
-            ${this._config.show_solar ? this.renderNode(snapshot.solar, 'top left', 'solar', this._config.solar_entity) : A}
-            ${this._config.show_grid ? this.renderNode(snapshot.grid, 'top right', 'grid', this._config.grid_entity) : A}
+            ${this._config.show_solar
+            ? this.renderNode(snapshot.solar, this.getNodePosition('solar'), 'solar', this._config.solar_entity, undefined, this.getConsoleNodeMetrics(snapshot, 'solar'))
+            : A}
+            ${this._config.show_grid
+            ? this.renderNode(snapshot.grid, this.getNodePosition('grid'), 'grid', this._config.grid_entity, undefined, this.getConsoleNodeMetrics(snapshot, 'grid'))
+            : A}
             ${this.renderCore(snapshot, advanced)}
-            ${this._config.show_battery ? this.renderNode(snapshot.battery, 'bottom left', 'battery', this._config.battery_power_entity, snapshot.battery.soc) : A}
-            ${this.renderNode(snapshot.home, 'bottom right', 'home', this._config.home_entity)}
+            ${this._config.show_battery
+            ? this.renderNode(snapshot.battery, this.getNodePosition('battery'), 'battery', this._config.battery_power_entity, snapshot.battery.soc, this.getConsoleNodeMetrics(snapshot, 'battery'))
+            : A}
+            ${this.renderNode(snapshot.home, this.getNodePosition('home'), 'home', this._config.home_entity, undefined, this.getConsoleNodeMetrics(snapshot, 'home'))}
 
             ${this._config.show_solar
             ? this.renderFlow({
@@ -1370,8 +1377,10 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
     `;
     }
     renderCore(snapshot, advanced) {
+        const coreState = this.getCoreState(snapshot);
+        const consolePreset = this._config.visual_preset === 'console';
         return b `
-      <div class="core">
+      <div class=${`core ${consolePreset ? 'console-core' : ''}`}>
         <span class="flow-anchor core-anchor top-left"></span>
         <span class="flow-anchor core-anchor top-right"></span>
         <span class="flow-anchor core-anchor bottom-left"></span>
@@ -1379,15 +1388,30 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <div class="core-shield"></div>
         <div class="core-ring"></div>
         <div class="core-ring pulse"></div>
-        <div class="core-content">
-          <span class="core-label">Bilans</span>
-          <strong>${formatPower(snapshot.netHomeDemand, this._config.decimals ?? 1)}</strong>
-          <small>${advanced ? 'zapotrzebowanie netto i status pracy' : 'zapotrzebowanie netto'}</small>
-        </div>
+        ${consolePreset
+            ? b `
+              <div class="core-content console">
+                <span class="core-label">Inwerter / ladowarka</span>
+                <strong>${this.describeBatteryStatus(snapshot)}</strong>
+                <small>${snapshot.inverterStatus ?? (advanced ? coreState.detail : coreState.shortDetail)}</small>
+                <div class="console-core-stats">
+                  <span>${coreState.label}</span>
+                  <b>${formatPower(coreState.value, this._config.decimals ?? 1)}</b>
+                </div>
+              </div>
+            `
+            : b `
+              <div class="core-content">
+                <span class="core-label">${coreState.label}</span>
+                <strong>${formatPower(coreState.value, this._config.decimals ?? 1)}</strong>
+                <small>${advanced ? coreState.detail : coreState.shortDetail}</small>
+              </div>
+            `}
       </div>
     `;
     }
-    renderNode(node, position, iconName, entityId, soc) {
+    renderNode(node, position, iconName, entityId, soc, consoleMetrics = []) {
+        const consolePreset = this._config.visual_preset === 'console';
         return b `
       <article
         class=${`node ${position} ${entityId ? 'clickable' : ''}`}
@@ -1405,9 +1429,67 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
           <strong>${formatPower(node.value, this._config.decimals ?? 1)}</strong>
           <small>${node.secondary}</small>
           ${soc === undefined ? A : b `<small class="soc">Poziom: ${formatEnergy(soc, 0)}</small>`}
+          ${consolePreset && consoleMetrics.length > 0
+            ? b `
+                <div class="console-metrics">
+                  ${consoleMetrics.map((item) => b `
+                      <div class="console-metric-row">
+                        <span>${item.label}</span>
+                        <b>${item.value}</b>
+                      </div>
+                    `)}
+                </div>
+              `
+            : A}
         </div>
       </article>
     `;
+    }
+    getNodePosition(iconName) {
+        if (this._config.visual_preset !== 'console') {
+            return {
+                solar: 'top left',
+                grid: 'top right',
+                battery: 'bottom left',
+                home: 'bottom right',
+            }[iconName];
+        }
+        return {
+            solar: 'console-panel console-solar',
+            grid: 'console-panel console-grid',
+            battery: 'console-panel console-battery',
+            home: 'console-panel console-home',
+        }[iconName];
+    }
+    getConsoleNodeMetrics(snapshot, iconName) {
+        if (this._config.visual_preset !== 'console')
+            return [];
+        if (iconName === 'solar') {
+            return snapshot.pvBreakdown.slice(0, 3).map((item) => ({
+                label: item.label,
+                value: formatPower(item.value, this._config.decimals ?? 1),
+            }));
+        }
+        if (iconName === 'grid') {
+            return snapshot.gridPhaseBreakdown.slice(0, 3).map((item) => ({
+                label: item.label,
+                value: formatPower(item.value, this._config.decimals ?? 1),
+            }));
+        }
+        if (iconName === 'home') {
+            return snapshot.loadPhaseBreakdown.slice(0, 3).map((item) => ({
+                label: item.label,
+                value: formatPower(item.value, this._config.decimals ?? 1),
+            }));
+        }
+        const rows = [];
+        if (snapshot.batteryStoredKwh !== null) {
+            rows.push({ label: 'Energia', value: formatKwh(snapshot.batteryStoredKwh, 1) });
+        }
+        if (snapshot.batteryTemperature !== null) {
+            rows.push({ label: 'Temp', value: `${snapshot.batteryTemperature.toFixed(0)}°C` });
+        }
+        return rows.slice(0, 2);
     }
     renderIcon(iconName) {
         const paths = {
@@ -1588,9 +1670,82 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             x: toRect.left - stageRect.left + toRect.width / 2,
             y: toRect.top - stageRect.top + toRect.height / 2,
         };
+        if (this._config.visual_preset === 'console') {
+            return this.buildConsoleAnchoredPath(fromPoint, toPoint, anchor);
+        }
         const control1 = this.computeControlPoint(fromPoint, toPoint, anchor, true);
         const control2 = this.computeControlPoint(fromPoint, toPoint, anchor, false);
         return `M ${fromPoint.x.toFixed(1)} ${fromPoint.y.toFixed(1)} C ${control1.x.toFixed(1)} ${control1.y.toFixed(1)}, ${control2.x.toFixed(1)} ${control2.y.toFixed(1)}, ${toPoint.x.toFixed(1)} ${toPoint.y.toFixed(1)}`;
+    }
+    buildConsoleAnchoredPath(from, to, anchor) {
+        if (anchor === 'left') {
+            const midX = Math.max(from.x + 34, to.x - 48);
+            return this.buildRoundedPolylinePath([
+                from,
+                { x: midX, y: from.y },
+                { x: midX, y: to.y },
+                to,
+            ], 18);
+        }
+        if (anchor === 'right') {
+            const midX = Math.max(from.x + 34, to.x - 54);
+            return this.buildRoundedPolylinePath([
+                from,
+                { x: midX, y: from.y },
+                { x: midX, y: to.y },
+                to,
+            ], 18);
+        }
+        if (anchor === 'bottom-left') {
+            const midY = from.y - Math.max(34, Math.abs(from.y - to.y) * 0.45);
+            return this.buildRoundedPolylinePath([
+                from,
+                { x: from.x, y: midY },
+                { x: to.x, y: midY },
+                to,
+            ], 16);
+        }
+        const midX = from.x + Math.max(42, Math.abs(to.x - from.x) * 0.4);
+        return this.buildRoundedPolylinePath([
+            from,
+            { x: midX, y: from.y },
+            { x: midX, y: to.y },
+            to,
+        ], 20);
+    }
+    buildRoundedPolylinePath(points, radius) {
+        if (points.length < 2)
+            return '';
+        let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+        for (let index = 1; index < points.length - 1; index += 1) {
+            const previous = points[index - 1];
+            const current = points[index];
+            const next = points[index + 1];
+            const incomingLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+            const outgoingLength = Math.hypot(next.x - current.x, next.y - current.y);
+            const usableRadius = Math.min(radius, incomingLength / 2, outgoingLength / 2);
+            const incomingVector = {
+                x: (current.x - previous.x) / Math.max(incomingLength, 1),
+                y: (current.y - previous.y) / Math.max(incomingLength, 1),
+            };
+            const outgoingVector = {
+                x: (next.x - current.x) / Math.max(outgoingLength, 1),
+                y: (next.y - current.y) / Math.max(outgoingLength, 1),
+            };
+            const entryPoint = {
+                x: current.x - incomingVector.x * usableRadius,
+                y: current.y - incomingVector.y * usableRadius,
+            };
+            const exitPoint = {
+                x: current.x + outgoingVector.x * usableRadius,
+                y: current.y + outgoingVector.y * usableRadius,
+            };
+            d += ` L ${entryPoint.x.toFixed(1)} ${entryPoint.y.toFixed(1)}`;
+            d += ` Q ${current.x.toFixed(1)} ${current.y.toFixed(1)} ${exitPoint.x.toFixed(1)} ${exitPoint.y.toFixed(1)}`;
+        }
+        const lastPoint = points[points.length - 1];
+        d += ` L ${lastPoint.x.toFixed(1)} ${lastPoint.y.toFixed(1)}`;
+        return d;
     }
     computeControlPoint(from, to, anchor, first) {
         const mx = (from.x + to.x) / 2;
@@ -1840,6 +1995,83 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         }
         return 'Bilans pozostaly';
     }
+    getCoreState(snapshot) {
+        const candidates = [
+            {
+                key: 'solar_to_home',
+                label: snapshot.gridConnected === false ? 'Zasilanie off-grid' : 'Dom pokryty z PV',
+                value: snapshot.solarToHome,
+                detail: snapshot.gridConnected === false ? 'energia lokalna zasila odbiory' : 'autokonsumpcja bezposrednia',
+                shortDetail: 'autokonsumpcja',
+                priority: 30,
+            },
+            {
+                key: 'grid_to_home',
+                label: 'Import z sieci',
+                value: snapshot.gridToHome,
+                detail: 'siec wspiera aktualne zuzycie domu',
+                shortDetail: 'wsparcie domu',
+                priority: 90,
+            },
+            {
+                key: 'solar_to_battery',
+                label: 'Ladowanie magazynu',
+                value: snapshot.solarToBattery,
+                detail: 'nadwyzka PV laduje baterie',
+                shortDetail: 'z nadwyzki PV',
+                priority: 80,
+            },
+            {
+                key: 'grid_to_battery',
+                label: 'Ladowanie magazynu',
+                value: snapshot.gridToBattery,
+                detail: 'siec laduje magazyn energii',
+                shortDetail: 'z sieci',
+                priority: 100,
+            },
+            {
+                key: 'battery_to_home',
+                label: 'Praca z magazynu',
+                value: snapshot.batteryToHome,
+                detail: 'bateria zasila aktualne odbiory',
+                shortDetail: 'wsparcie domu',
+                priority: 85,
+            },
+            {
+                key: 'solar_to_grid',
+                label: 'Eksport do sieci',
+                value: snapshot.solarToGrid,
+                detail: 'nadwyzka produkcji oddawana do sieci',
+                shortDetail: 'nadwyzka produkcji',
+                priority: 95,
+            },
+            {
+                key: 'battery_to_grid',
+                label: 'Oddawanie do sieci',
+                value: snapshot.batteryToGrid,
+                detail: 'energia z baterii trafia do sieci',
+                shortDetail: 'z magazynu',
+                priority: 92,
+            },
+        ]
+            .filter((candidate) => candidate.value > 0)
+            .sort((a, b) => {
+            const priorityDelta = b.priority - a.priority;
+            if (priorityDelta !== 0)
+                return priorityDelta;
+            return b.value - a.value;
+        });
+        const dominant = candidates[0];
+        if (dominant)
+            return dominant;
+        return {
+            key: 'idle',
+            label: 'Przeplyw stabilny',
+            value: 0,
+            detail: 'brak dominujacego przeplywu w tej chwili',
+            shortDetail: 'stan stabilny',
+        };
+    }
     formatPercent(value, decimals = 1) {
         if (value === null)
             return '--';
@@ -2070,6 +2302,17 @@ ZsPowerFlowCard.styles = i$3 `
       min-height: 470px;
     }
 
+    .stage.preset-console {
+      min-height: 500px;
+      background:
+        radial-gradient(circle at 50% 12%, rgba(32, 133, 255, 0.12), transparent 28%),
+        linear-gradient(180deg, rgba(4, 18, 56, 0.98), rgba(2, 11, 35, 0.98));
+      border: 1px solid rgba(63, 169, 255, 0.35);
+      box-shadow:
+        inset 0 0 0 1px rgba(109, 203, 255, 0.08),
+        0 16px 34px rgba(0, 6, 22, 0.3);
+    }
+
     .ambient {
       position: absolute;
       border-radius: 999px;
@@ -2096,6 +2339,16 @@ ZsPowerFlowCard.styles = i$3 `
       animation: float 14s ease-in-out infinite reverse;
     }
 
+    .preset-console .ambient {
+      opacity: 0.12;
+      filter: blur(28px);
+    }
+
+    .preset-console .ambient-a,
+    .preset-console .ambient-b {
+      background: rgba(64, 196, 255, 0.55);
+    }
+
     .grid-lines {
       position: absolute;
       inset: 0;
@@ -2105,6 +2358,12 @@ ZsPowerFlowCard.styles = i$3 `
       background-size: 28px 28px;
       mask-image: radial-gradient(circle at center, black 32%, transparent 82%);
       opacity: 0.3;
+    }
+
+    .preset-console .grid-lines {
+      opacity: 0.08;
+      background-size: 36px 36px;
+      mask-image: none;
     }
 
     .core {
@@ -2148,6 +2407,24 @@ ZsPowerFlowCard.styles = i$3 `
       top: calc(50% - 4px);
     }
 
+    .preset-console .node-anchor.solar,
+    .preset-console .node-anchor.grid {
+      left: auto;
+      right: -2px;
+      top: calc(50% - 4px);
+    }
+
+    .preset-console .node-anchor.battery {
+      left: calc(50% - 4px);
+      right: auto;
+      top: -2px;
+    }
+
+    .preset-console .node-anchor.home {
+      left: -2px;
+      top: calc(50% - 4px);
+    }
+
     .core-anchor.top-left {
       left: 28px;
       top: 44px;
@@ -2168,9 +2445,43 @@ ZsPowerFlowCard.styles = i$3 `
       bottom: 44px;
     }
 
+    .preset-console .core-anchor.top-left {
+      left: -2px;
+      top: 76%;
+    }
+
+    .preset-console .core-anchor.top-right {
+      left: -2px;
+      right: auto;
+      top: 38%;
+    }
+
+    .preset-console .core-anchor.bottom-left {
+      left: calc(50% - 4px);
+      bottom: -2px;
+    }
+
+    .preset-console .core-anchor.bottom-right {
+      right: -2px;
+      top: calc(50% - 4px);
+    }
+
     .stage.layout-focus-home .core {
       width: 188px;
       height: 188px;
+    }
+
+    .preset-console .core {
+      inset: 34% auto auto 50%;
+      width: min(34vw, 340px);
+      min-width: 250px;
+      height: 150px;
+      border-radius: 24px;
+    }
+
+    .preset-console.stage.layout-focus-home .core {
+      width: min(36vw, 360px);
+      height: 158px;
     }
 
     .core-shield {
@@ -2206,11 +2517,44 @@ ZsPowerFlowCard.styles = i$3 `
       z-index: 0;
     }
 
+    .preset-console .core-shield {
+      inset: 0;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(9, 49, 122, 0.96), rgba(4, 24, 66, 0.96));
+      box-shadow:
+        inset 0 0 0 2px rgba(51, 190, 255, 0.68),
+        inset 0 0 0 8px rgba(22, 80, 170, 0.16),
+        0 0 26px rgba(34, 162, 255, 0.2);
+    }
+
+    .preset-console .core-ring {
+      inset: 10px;
+      border-radius: 20px;
+      background: none;
+      box-shadow: inset -3px 0 0 rgba(105, 214, 255, 0.22);
+      opacity: 0.85;
+    }
+
+    .preset-console .core-ring.pulse {
+      display: none;
+    }
+
     .core-content {
       position: relative;
       z-index: 2;
       text-align: center;
       padding: 22px;
+    }
+
+    .core-content.console {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+      text-align: left;
+      padding: 18px 22px 16px;
+      color: #d7f7ff;
     }
 
     .core-label,
@@ -2223,6 +2567,50 @@ ZsPowerFlowCard.styles = i$3 `
       display: block;
       margin: 8px 0 4px;
       font-size: 1.55rem;
+    }
+
+    .core-content.console strong {
+      margin: 0;
+      font-size: clamp(1.6rem, 2.8vw, 2.8rem);
+      line-height: 0.96;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      color: #d6fff6;
+      text-shadow: 0 0 12px rgba(117, 237, 255, 0.22);
+    }
+
+    .preset-console .core-label {
+      color: rgba(201, 243, 255, 0.9);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .core-content.console small {
+      color: rgba(194, 240, 255, 0.86);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .console-core-stats {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid rgba(93, 208, 255, 0.18);
+      color: rgba(174, 232, 255, 0.84);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .console-core-stats b {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f0fdff;
+      letter-spacing: 0;
     }
 
     .node {
@@ -2247,6 +2635,54 @@ ZsPowerFlowCard.styles = i$3 `
     .node:hover {
       transform: translateY(-2px);
       border-color: color-mix(in srgb, var(--accent) 28%, rgba(255,255,255,0.08));
+    }
+
+    .preset-console .node {
+      width: 186px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(7, 40, 102, 0.92), rgba(3, 22, 62, 0.96));
+      border: 1px solid rgba(61, 181, 255, 0.58);
+      backdrop-filter: none;
+      box-shadow:
+        inset 0 0 0 1px rgba(63, 196, 255, 0.16),
+        0 0 24px rgba(20, 112, 255, 0.12);
+    }
+
+    .preset-console .console-panel {
+      z-index: 3;
+    }
+
+    .preset-console .console-grid {
+      top: 30px;
+      left: 30px;
+    }
+
+    .preset-console .console-solar {
+      left: 30px;
+      bottom: 40px;
+    }
+
+    .preset-console .console-battery {
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%);
+      width: min(30vw, 240px);
+      min-width: 188px;
+    }
+
+    .preset-console .console-home {
+      top: 50%;
+      right: 30px;
+      transform: translateY(-50%);
+      width: 196px;
+    }
+
+    .preset-console .node:hover {
+      border-color: rgba(111, 221, 255, 0.82);
+      box-shadow:
+        inset 0 0 0 1px rgba(111, 221, 255, 0.18),
+        0 0 28px rgba(50, 154, 255, 0.18);
     }
 
     .node.clickable {
@@ -2285,6 +2721,16 @@ ZsPowerFlowCard.styles = i$3 `
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
     }
 
+    .preset-console .icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(18, 123, 255, 0.16);
+      box-shadow:
+        inset 0 0 0 1px rgba(112, 215, 255, 0.22),
+        0 0 14px rgba(60, 183, 255, 0.12);
+    }
+
     .icon svg {
       width: 24px;
       height: 24px;
@@ -2305,6 +2751,32 @@ ZsPowerFlowCard.styles = i$3 `
       gap: 4px;
     }
 
+    .console-metrics {
+      display: grid;
+      gap: 3px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(123, 215, 255, 0.16);
+    }
+
+    .console-metric-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 0.78rem;
+    }
+
+    .console-metric-row span {
+      color: rgba(190, 240, 255, 0.8);
+    }
+
+    .console-metric-row b {
+      color: #ecfeff;
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
     .label,
     .meta small {
       color: var(--zs-muted);
@@ -2313,6 +2785,17 @@ ZsPowerFlowCard.styles = i$3 `
     .meta strong {
       font-size: 1.28rem;
       line-height: 1.05;
+    }
+
+    .preset-console .bottom.left {
+      background: linear-gradient(180deg, rgba(26, 164, 255, 0.94), rgba(23, 200, 255, 0.82));
+      border-color: rgba(135, 241, 255, 0.72);
+    }
+
+    .preset-console .bottom.left .label,
+    .preset-console .bottom.left .meta small,
+    .preset-console .bottom.left .meta strong {
+      color: rgba(236, 254, 255, 0.98);
     }
 
     .soc {
@@ -2335,6 +2818,11 @@ ZsPowerFlowCard.styles = i$3 `
       stroke-linecap: round;
     }
 
+    .preset-console .flow-track {
+      stroke: rgba(81, 188, 255, 0.24);
+      stroke-width: 2.2;
+    }
+
     .flow-base {
       fill: none;
       stroke: color-mix(in srgb, var(--flow-color) 26%, rgba(255, 255, 255, 0.05));
@@ -2344,6 +2832,12 @@ ZsPowerFlowCard.styles = i$3 `
       filter: drop-shadow(0 0 8px color-mix(in srgb, var(--flow-color) 16%, transparent));
     }
 
+    .preset-console .flow-base {
+      stroke: color-mix(in srgb, var(--flow-color) 62%, rgba(119, 226, 255, 0.42));
+      opacity: 0.48;
+      filter: drop-shadow(0 0 4px color-mix(in srgb, var(--flow-color) 20%, transparent));
+    }
+
     .flow-aura {
       fill: none;
       stroke: var(--flow-color);
@@ -2351,6 +2845,10 @@ ZsPowerFlowCard.styles = i$3 `
       stroke-linecap: round;
       opacity: 0;
       filter: blur(8px);
+    }
+
+    .preset-console .flow-aura {
+      filter: blur(4px);
     }
 
     .flow-aura.visible {
@@ -2365,6 +2863,11 @@ ZsPowerFlowCard.styles = i$3 `
       stroke-dasharray: 18 24;
       opacity: 0.14;
       filter: drop-shadow(0 0 10px color-mix(in srgb, var(--flow-color) 45%, transparent));
+    }
+
+    .preset-console .flow-line {
+      stroke-dasharray: 6 16;
+      filter: drop-shadow(0 0 8px color-mix(in srgb, var(--flow-color) 60%, transparent));
     }
 
     .flow-line.soft {
@@ -2764,6 +3267,11 @@ ZsPowerFlowCard.styles = i$3 `
         height: 198px;
       }
 
+      .preset-console .core {
+        width: 360px;
+        height: 158px;
+      }
+
       .stage.layout-focus-home .core {
         width: 220px;
         height: 220px;
@@ -2818,6 +3326,10 @@ ZsPowerFlowCard.styles = i$3 `
         min-height: 720px;
       }
 
+      .stage.preset-console {
+        min-height: 760px;
+      }
+
       .top.left,
       .top.right {
         top: 18px;
@@ -2848,6 +3360,35 @@ ZsPowerFlowCard.styles = i$3 `
         align-items: center;
         text-align: center;
         border-radius: 20px;
+      }
+
+      .preset-console .node {
+        width: calc(50% - 36px);
+        max-width: 150px;
+        min-width: 114px;
+      }
+
+      .preset-console .console-grid {
+        top: 18px;
+        left: 18px;
+      }
+
+      .preset-console .console-solar {
+        left: 18px;
+        bottom: 26px;
+      }
+
+      .preset-console .console-home {
+        top: 50%;
+        right: 18px;
+        width: calc(50% - 36px);
+        max-width: 150px;
+      }
+
+      .preset-console .console-battery {
+        bottom: 18px;
+        width: min(42vw, 180px);
+        min-width: 132px;
       }
 
       .icon {
@@ -2887,17 +3428,44 @@ ZsPowerFlowCard.styles = i$3 `
         height: 154px;
       }
 
+      .preset-console .core {
+        width: min(78vw, 278px);
+        min-width: 210px;
+        height: 136px;
+      }
+
       .stage.layout-focus-home .core {
         width: 168px;
         height: 168px;
+      }
+
+      .preset-console.stage.layout-focus-home .core {
+        width: min(82vw, 290px);
+        height: 140px;
       }
 
       .core-content {
         padding: 18px;
       }
 
+      .core-content.console {
+        padding: 14px 16px;
+      }
+
+      .console-metric-row {
+        font-size: 0.7rem;
+      }
+
+      .console-metric-row b {
+        font-size: 0.76rem;
+      }
+
       .core-content strong {
         font-size: 1.3rem;
+      }
+
+      .core-content.console strong {
+        font-size: 1.5rem;
       }
 
       .core-content small {
@@ -2948,9 +3516,25 @@ ZsPowerFlowCard.styles = i$3 `
         height: 146px;
       }
 
+      .preset-console .core {
+        width: min(80vw, 258px);
+        min-width: 196px;
+        height: 130px;
+      }
+
+      .preset-console .console-battery {
+        width: min(44vw, 170px);
+        min-width: 126px;
+      }
+
       .stage.layout-focus-home .core {
         width: 160px;
         height: 160px;
+      }
+
+      .preset-console.stage.layout-focus-home .core {
+        width: min(84vw, 268px);
+        height: 134px;
       }
     }
   `;

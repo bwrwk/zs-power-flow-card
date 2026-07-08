@@ -1571,14 +1571,18 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .core-content.console {
+      position: absolute;
+      inset: 0;
+      box-sizing: border-box;
       width: 100%;
       height: 100%;
       display: grid;
       align-content: start;
       gap: 8px;
       text-align: left;
-      padding: 24px 28px 20px;
+      padding: 26px 32px 22px;
       color: #d7f7ff;
+      overflow: hidden;
     }
 
     .core-label,
@@ -1623,6 +1627,8 @@ export class ZsPowerFlowCard extends LitElement {
       align-items: baseline;
       margin-top: auto;
       padding-top: 14px;
+      width: 100%;
+      box-sizing: border-box;
       border-top: 1px solid rgba(93, 208, 255, 0.18);
       color: rgba(174, 232, 255, 0.84);
       font-size: 0.78rem;
@@ -2478,7 +2484,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .core-content.console {
-        padding: 18px 18px 16px;
+        padding: 20px 22px 18px;
       }
 
       .console-metric-row {

@@ -1324,7 +1324,7 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .stage.preset-console {
-      --console-cluster-width: 1120px;
+      --console-cluster-width: 1180px;
       --console-side-offset: max(30px, calc(50% - (var(--console-cluster-width) / 2)));
       --console-home-offset: max(30px, calc(50% - (var(--console-cluster-width) / 2)));
       min-height: 500px;
@@ -1497,15 +1497,15 @@ export class ZsPowerFlowCard extends LitElement {
 
     .preset-console .core {
       inset: 34% auto auto 50%;
-      width: min(36vw, 388px);
-      min-width: 300px;
-      height: 156px;
+      width: min(37vw, 412px);
+      min-width: 324px;
+      height: 170px;
       border-radius: 24px;
     }
 
     .preset-console.stage.layout-focus-home .core {
-      width: min(38vw, 408px);
-      height: 162px;
+      width: min(39vw, 430px);
+      height: 176px;
     }
 
     .core-shield {
@@ -1575,9 +1575,9 @@ export class ZsPowerFlowCard extends LitElement {
       height: 100%;
       display: grid;
       align-content: start;
-      gap: 6px;
+      gap: 8px;
       text-align: left;
-      padding: 18px 22px 16px;
+      padding: 24px 28px 20px;
       color: #d7f7ff;
     }
 
@@ -1595,8 +1595,8 @@ export class ZsPowerFlowCard extends LitElement {
 
     .core-content.console strong {
       margin: 0;
-      font-size: clamp(1.6rem, 2.8vw, 2.8rem);
-      line-height: 0.96;
+      font-size: clamp(1.45rem, 2.45vw, 2.45rem);
+      line-height: 1.02;
       font-weight: 500;
       letter-spacing: -0.03em;
       color: #d6fff6;
@@ -1605,14 +1605,14 @@ export class ZsPowerFlowCard extends LitElement {
 
     .preset-console .core-label {
       color: rgba(201, 243, 255, 0.9);
-      font-size: 0.78rem;
+      font-size: 0.74rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
 
     .core-content.console small {
       color: rgba(194, 240, 255, 0.86);
-      font-size: 0.86rem;
+      font-size: 0.82rem;
       line-height: 1.35;
     }
 
@@ -1622,7 +1622,7 @@ export class ZsPowerFlowCard extends LitElement {
       gap: 12px;
       align-items: baseline;
       margin-top: auto;
-      padding-top: 12px;
+      padding-top: 14px;
       border-top: 1px solid rgba(93, 208, 255, 0.18);
       color: rgba(174, 232, 255, 0.84);
       font-size: 0.78rem;
@@ -1688,17 +1688,18 @@ export class ZsPowerFlowCard extends LitElement {
     }
 
     .preset-console .console-battery {
-      left: 50%;
+      left: auto;
+      right: var(--console-home-offset);
       bottom: 30px;
-      transform: translateX(-50%);
-      width: min(28vw, 274px);
+      transform: none;
+      width: min(28vw, 250px);
       min-width: 224px;
     }
 
     .preset-console .console-home {
-      top: 50%;
+      top: 30px;
       right: var(--console-home-offset);
-      transform: translateY(-50%);
+      transform: none;
       width: 230px;
     }
 
@@ -2403,14 +2404,18 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .preset-console .console-home {
-        top: 50%;
+        top: 18px;
         right: 18px;
         width: calc(50% - 36px);
         max-width: 150px;
+        transform: none;
       }
 
       .preset-console .console-battery {
         bottom: 18px;
+        right: 18px;
+        left: auto;
+        transform: none;
         width: min(42vw, 180px);
         min-width: 132px;
       }
@@ -2455,7 +2460,7 @@ export class ZsPowerFlowCard extends LitElement {
       .preset-console .core {
         width: min(78vw, 278px);
         min-width: 210px;
-        height: 136px;
+        height: 148px;
       }
 
       .stage.layout-focus-home .core {
@@ -2473,7 +2478,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .core-content.console {
-        padding: 14px 16px;
+        padding: 18px 18px 16px;
       }
 
       .console-metric-row {
@@ -2489,7 +2494,7 @@ export class ZsPowerFlowCard extends LitElement {
       }
 
       .core-content.console strong {
-        font-size: 1.5rem;
+        font-size: 1.36rem;
       }
 
       .core-content small {
@@ -2543,7 +2548,7 @@ export class ZsPowerFlowCard extends LitElement {
       .preset-console .core {
         width: min(80vw, 258px);
         min-width: 196px;
-        height: 130px;
+        height: 140px;
       }
 
       .preset-console .console-battery {

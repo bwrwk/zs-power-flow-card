@@ -4,6 +4,7 @@ export type DetailsMode = 'summary' | 'extended';
 export type ViewMode = 'simple' | 'advanced';
 export type VisualPreset = 'default' | 'compact' | 'analytics' | 'console';
 export type FlowStyle = 'soft' | 'beam' | 'pulse';
+export type BatteryPrimaryMetric = 'power' | 'soc';
 export type CardActionType = 'more-info' | 'navigate' | 'url' | 'none';
 
 export interface CardActionConfig {
@@ -57,6 +58,7 @@ export interface ZsPowerFlowCardConfig {
   view_mode?: ViewMode;
   visual_preset?: VisualPreset;
   flow_style?: FlowStyle;
+  battery_primary_metric?: BatteryPrimaryMetric;
   show_details?: boolean;
   details_mode?: DetailsMode;
   show_solar?: boolean;

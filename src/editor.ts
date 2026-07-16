@@ -88,6 +88,10 @@ export class ZsPowerFlowCardEditor extends LitElement {
               ['beam', 'Beam'],
               ['pulse', 'Pulse'],
             ], 'Zmienia charakter animacji przeplywu energii bez zmiany danych.')}
+            ${this.renderSelectField('Glowna wartosc baterii', 'battery_primary_metric', config.battery_primary_metric ?? 'power', [
+              ['power', 'Moc (W / kW)'],
+              ['soc', 'SOC (%)'],
+            ], 'Pozwala wybrac, czy na kafelku magazynu najwieksza wartoscia ma byc aktualna moc baterii czy poziom naladowania.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
               ['summary', 'Summary'],
               ['extended', 'Extended'],

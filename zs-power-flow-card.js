@@ -153,6 +153,10 @@ let ZsPowerFlowCardEditor = class ZsPowerFlowCardEditor extends i {
             ['beam', 'Beam'],
             ['pulse', 'Pulse'],
         ], 'Zmienia charakter animacji przeplywu energii bez zmiany danych.')}
+            ${this.renderSelectField('Glowna wartosc baterii', 'battery_primary_metric', config.battery_primary_metric ?? 'power', [
+            ['power', 'Moc (W / kW)'],
+            ['soc', 'SOC (%)'],
+        ], 'Pozwala wybrac, czy na kafelku magazynu najwieksza wartoscia ma byc aktualna moc baterii czy poziom naladowania.')}
             ${this.renderSelectField('Tryb szczegolow', 'details_mode', config.details_mode ?? 'summary', [
             ['summary', 'Summary'],
             ['extended', 'Extended'],
@@ -1164,6 +1168,7 @@ const DEFAULT_CONFIG = {
     view_mode: 'simple',
     visual_preset: 'default',
     flow_style: 'soft',
+    battery_primary_metric: 'power',
     show_details: true,
     details_mode: 'summary',
     show_solar: true,
@@ -1312,7 +1317,7 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             : A}
             ${this.renderCore(snapshot, advanced)}
             ${this._config.show_battery
-            ? this.renderNode(snapshot.battery, this.getNodePosition('battery'), 'battery', this._config.battery_power_entity, snapshot.battery.soc, this.getConsoleNodeMetrics(snapshot, 'battery'))
+            ? this.renderNode(snapshot.battery, this.getNodePosition('battery'), 'battery', this._config.battery_power_entity, snapshot.battery.soc, this.getConsoleNodeMetrics(snapshot, 'battery'), this.getBatteryDisplayOptions(snapshot))
             : A}
             ${this.renderNode(snapshot.home, this.getNodePosition('home'), 'home', this._config.home_entity, undefined, this.getConsoleNodeMetrics(snapshot, 'home'))}
 
@@ -1410,8 +1415,11 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
       </div>
     `;
     }
-    renderNode(node, position, iconName, entityId, soc, consoleMetrics = []) {
+    renderNode(node, position, iconName, entityId, soc, consoleMetrics = [], displayOptions) {
         const consolePreset = this._config.visual_preset === 'console';
+        const primaryText = displayOptions?.primaryText ?? formatPower(node.value, this._config.decimals ?? 1);
+        const secondaryText = displayOptions?.secondaryText ?? node.secondary;
+        const tertiaryText = displayOptions?.tertiaryText ?? (soc === undefined ? null : `Poziom: ${formatEnergy(soc, 0)}`);
         return b `
       <article
         class=${`node ${position} ${entityId ? 'clickable' : ''}`}
@@ -1426,9 +1434,9 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
         <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
-          <strong>${formatPower(node.value, this._config.decimals ?? 1)}</strong>
-          <small>${node.secondary}</small>
-          ${soc === undefined ? A : b `<small class="soc">Poziom: ${formatEnergy(soc, 0)}</small>`}
+          <strong>${primaryText}</strong>
+          <small>${secondaryText}</small>
+          ${tertiaryText ? b `<small class="soc">${tertiaryText}</small>` : A}
           ${consolePreset && consoleMetrics.length > 0
             ? b `
                 <div class="console-metrics">
@@ -1460,6 +1468,16 @@ let ZsPowerFlowCard = class ZsPowerFlowCard extends i {
             battery: 'console-panel console-battery',
             home: 'console-panel console-home',
         }[iconName];
+    }
+    getBatteryDisplayOptions(snapshot) {
+        const primaryMetric = this._config.battery_primary_metric ?? 'power';
+        if (primaryMetric !== 'soc')
+            return undefined;
+        return {
+            primaryText: snapshot.battery.soc === null ? '--' : `${snapshot.battery.soc.toFixed(0)}%`,
+            secondaryText: this.describeBatteryStatus(snapshot),
+            tertiaryText: `Moc: ${formatPower(snapshot.battery.value, this._config.decimals ?? 1)}`,
+        };
     }
     getConsoleNodeMetrics(snapshot, iconName) {
         if (this._config.visual_preset !== 'console')

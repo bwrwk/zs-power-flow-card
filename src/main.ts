@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: ZsPowerFlowCardConfig = {
   view_mode: 'simple',
   visual_preset: 'default',
   flow_style: 'soft',
+  battery_primary_metric: 'power',
   show_details: true,
   details_mode: 'summary',
   show_solar: true,
@@ -201,6 +202,7 @@ export class ZsPowerFlowCard extends LitElement {
                   this._config.battery_power_entity,
                   snapshot.battery.soc,
                   this.getConsoleNodeMetrics(snapshot, 'battery'),
+                  this.getBatteryDisplayOptions(snapshot),
                 )
               : nothing}
             ${this.renderNode(
@@ -318,8 +320,16 @@ export class ZsPowerFlowCard extends LitElement {
     entityId?: string,
     soc?: number | null,
     consoleMetrics: Array<{ label: string; value: string }> = [],
+    displayOptions?: {
+      primaryText?: string;
+      secondaryText?: string;
+      tertiaryText?: string | null;
+    },
   ) {
     const consolePreset = this._config.visual_preset === 'console';
+    const primaryText = displayOptions?.primaryText ?? formatPower(node.value, this._config.decimals ?? 1);
+    const secondaryText = displayOptions?.secondaryText ?? node.secondary;
+    const tertiaryText = displayOptions?.tertiaryText ?? (soc === undefined ? null : `Poziom: ${formatEnergy(soc, 0)}`);
     return html`
       <article
         class=${`node ${position} ${entityId ? 'clickable' : ''}`}
@@ -334,9 +344,9 @@ export class ZsPowerFlowCard extends LitElement {
         <div class="icon">${this.renderIcon(iconName)}</div>
         <div class="meta">
           <span class="label">${node.label}</span>
-          <strong>${formatPower(node.value, this._config.decimals ?? 1)}</strong>
-          <small>${node.secondary}</small>
-          ${soc === undefined ? nothing : html`<small class="soc">Poziom: ${formatEnergy(soc, 0)}</small>`}
+          <strong>${primaryText}</strong>
+          <small>${secondaryText}</small>
+          ${tertiaryText ? html`<small class="soc">${tertiaryText}</small>` : nothing}
           ${consolePreset && consoleMetrics.length > 0
             ? html`
                 <div class="console-metrics">
@@ -372,6 +382,17 @@ export class ZsPowerFlowCard extends LitElement {
       battery: 'console-panel console-battery',
       home: 'console-panel console-home',
     }[iconName];
+  }
+
+  private getBatteryDisplayOptions(snapshot: PowerFlowSnapshot) {
+    const primaryMetric = this._config.battery_primary_metric ?? 'power';
+    if (primaryMetric !== 'soc') return undefined;
+
+    return {
+      primaryText: snapshot.battery.soc === null ? '--' : `${snapshot.battery.soc.toFixed(0)}%`,
+      secondaryText: this.describeBatteryStatus(snapshot),
+      tertiaryText: `Moc: ${formatPower(snapshot.battery.value, this._config.decimals ?? 1)}`,
+    };
   }
 
   private getConsoleNodeMetrics(
